@@ -2,7 +2,8 @@
   (:refer-clojure :exclude #?(:clj  [deftype replace var? force]
                               :cljs [var? key replace force]))
   #?(:cljs (:require-macros [om.next :refer [defui invariant]]))
-  (:require #?@(:clj  [[cljs.core :refer [deftype specify! this-as js-arguments]]
+  (:require #?@(:clj  [clojure.main
+                       [cljs.core :refer [deftype specify! this-as js-arguments]]
                        [clojure.reflect :as reflect]
                        [cljs.util]]
                 :cljs [[goog.string :as gstring]
@@ -85,7 +86,7 @@
                        om.next/*instrument* (om.next/instrument this#)
                        om.next/*parent*     this#]
                (let [ret# (do ~@body)
-                     props# (om.next.protocols/-props this#)]
+                     props# (:props this#)]
                  (when-not @(:omcljs$mounted? props#)
                    (swap! (:omcljs$mounted? props#) not))
                  ret#)))))
@@ -98,7 +99,9 @@
                (om.next.protocols/index-component! indexer# this#))
              ~@body)))}
       :defaults
-      `{~'componentWillMount
+      `{~'initLocalState
+        ([this#])
+        ~'componentWillMount
         ([this#]
          (let [indexer# (get-in (om.next/get-reconciler this#) [:config :indexer])]
            (when-not (nil? indexer#)
@@ -317,48 +320,55 @@
                    docstring rest)
            {:keys [dt statics]} (collect-statics forms)
            [other-protocols obj-dt] (split-with (complement '#{Object}) dt)
+           klass-name (symbol (str name "_klass"))
+           lifecycle-method-names (set (keys lifecycle-sigs))
+           {obj-dt false non-lifecycle-dt true} (group-by
+                                                  (fn [x]
+                                                    (and (sequential? x)
+                                                         (not (lifecycle-method-names (first x)))))
+                                                  obj-dt)
            class-methods (when-not (empty? (:protocols statics))
                            (->> (partition 2 (:protocols statics))
                              (reduce
                                (fn [r [_ impl]]
                                  (assoc r (keyword (first impl))
                                    (cons 'fn (rest impl)))) {:params '(fn [this])})))]
-       `(let [c# (fn ~name [state# refs# props# children#]
-                   ;; TODO: non-lifecycle methods defined in the JS prototype - António
-                   (let [ret# (reify
-                                om.next.protocols/IReactLifecycle
-                                ~@(rest (reshape obj-dt reshape-map-clj))
+       `(do
+          ~(when-not (empty? non-lifecycle-dt)
+             `(defprotocol ~(symbol (str name "_proto"))
+                ~@(map (fn [[m-name args]] (list m-name args)) non-lifecycle-dt)))
+          (declare ~name)
+          (defrecord ~klass-name [~'state ~'refs ~'props ~'children]
+            ;; TODO: non-lifecycle methods defined in the JS prototype - António
+            om.next.protocols/IReactLifecycle
+            ~@(rest (reshape obj-dt reshape-map-clj))
 
-                                ~@other-protocols
+            ~@other-protocols
 
-                                ~@(:protocols statics)
+            ~@(:protocols statics)
 
-                                om.next.protocols/IReactChildren
-                                (~'-children [this#]
-                                 children#)
+            ~@(when-not (empty? non-lifecycle-dt)
+                (list* (symbol (str name "_proto"))
+                  non-lifecycle-dt))
 
-                                om.next.protocols/IReactComponent
-                                (~'-render [this#]
-                                 (p/componentWillMount this#)
-                                 (p/render this#))
-                                (~'-props [this]
-                                 props#)
-                                (~'-local-state [this]
-                                 state#)
-                                (~'-refs [this]
-                                 refs#))]
-                     (defmethod clojure.core/print-method (type ret#)
-                       [o# ^Writer w#]
-                       (.write w# (str "#object[" (ns-name *ns*) "/" ~(str name) "]")))
-                     ret#))]
-          (def ~(with-meta name
-                  (merge (meta name)
-                    (when docstring
-                      {:doc docstring})))
-            (with-meta c# (merge {:component c#
-                                  :component-ns (ns-name *ns*)
-                                  :component-name ~(str name)}
-                            ~class-methods)))))))
+            om.next.protocols/IReactComponent
+            (~'-render [this#]
+             (p/componentWillMount this#)
+             (p/render this#)))
+          (defmethod clojure.core/print-method ~(symbol (str (munge *ns*) "." klass-name))
+            [o# ^Writer w#]
+            (.write w# (str "#object[" (ns-name *ns*) "/" ~(str name) "]")))
+          (let [c# (fn ~name [state# refs# props# children#]
+                     (~(symbol (str (munge *ns*) "." klass-name ".")) state# refs# props# children#))]
+            (def ~(with-meta name
+                    (merge (meta name)
+                      (when docstring
+                        {:doc docstring})))
+              (with-meta c#
+                (merge {:component c#
+                        :component-ns (ns-name *ns*)
+                        :component-name ~(str name)}
+                  ~class-methods))))))))
 
 (defn defui*
   ([name form] (defui* name form nil))
@@ -453,64 +463,6 @@
        (if obj-name
          (.write w (str obj-ns "/" obj-name))
          (#'clojure.core/print-object o w)))))
-
-(comment
-  (collect-statics
-    '(static IFoo
-       (foo [_])
-       (bar [_])
-       static field sel '[:woz ?noz]
-       Object
-       (toString [_])))
-
-  (require '[clojure.pprint :refer [pprint]])
-
-  (pprint
-    (defui* 'Artist
-     '(static IFoo
-        (foo [_])
-        (bar [_])
-        static field sel '[:woz ?noz]
-        Object
-        (toString [_]))))
-
-  (pprint
-    (defui* 'Artist
-      '(static IFoo
-         (foo [_])
-         (bar [_])
-         static field sel '[:woz ?noz]
-         Object
-         (render [_ {:keys [self artists]}]
-           (om.dom/div nil "Hello!"))
-         (toString [_]))))
-
-  (pprint
-    (defui* 'Artist
-      '(static IFoo
-         (foo [_])
-         (bar [_])
-         static field sel '[:woz ?noz]
-         Object
-         (render [_ {:keys [self artists]}]
-           (om.dom/div nil "Hello!"))
-         (componentWillUnmount [this]
-           (first [1 2 3])))))
-
-  (pprint
-    (defui* 'Artist
-      '(Object
-        (initLocalState [this]
-          {:foo 'bar})
-        (render [_ {:keys [self artists]}]
-          (om.dom/div nil "Hello!")))))
-
-  (pprint
-    (defui* 'Component
-     '(static om.next/IQuery
-        (query [this] '[:foo/bar :baz/woz]))))
-  )
-
 
 ;; =============================================================================
 ;; CLJS
@@ -896,15 +848,11 @@
                         :omcljs$shared     *shared*
                         :omcljs$instrument *instrument*
                         :omcljs$depth      *depth*}
-                 component (ctor (atom nil) (atom nil) props children)
-                 init-state (try
-                              (.initLocalState component)
-                              (catch AbstractMethodError _))]
+                 component (ctor (atom nil) (atom nil) props children)]
              (when ref
                (assert (some? *parent*))
-               (swap! (p/-refs *parent*) assoc ref component))
-             (when init-state
-               (reset! (p/-local-state component) init-state))
+               (swap! (:refs *parent*) assoc ref component))
+             (reset! (:state component) (.initLocalState component))
              component)))))))
 
 #?(:cljs
@@ -945,20 +893,13 @@
                    :omcljs$depth      *depth*}
               (util/force-children children))))))))
 
-#?(:clj
-   (defn renderable? [x]
-     (and (satisfies? p/IReactComponent x)
-       (try
-         (boolean (p/render x))
-         (catch AbstractMethodError e
-           false)))))
-
 (defn component?
   "Returns true if the argument is an Om component."
   #?(:cljs {:tag boolean})
   [x]
   (if-not (nil? x)
-    #?(:clj  (satisfies? p/IReactComponent x)
+    #?(:clj  (or (instance? om.next.protocols.IReactComponent x)
+                 (satisfies? p/IReactComponent x))
        :cljs (true? (. x -om$isComponent)))
     false))
 
@@ -969,7 +910,7 @@
 (defn- get-prop
   "PRIVATE: Do not use"
   [c k]
-  #?(:clj  (get (p/-props c) k)
+  #?(:clj  (get (:props c) k)
      :cljs (gobj/get (.-props c) k)))
 
 #?(:cljs
@@ -1090,8 +1031,10 @@
       mounted"
      [component]
      {:pre [(component? component)]}
-     (let [[ns _ c] (str/split (reflect/typename (type component)) #"\$")
-           ns (clojure.main/demunge ns)]
+     (let [[klass-name] (str/split (reflect/typename (type component)) #"_klass")
+           last-idx-dot (.lastIndexOf klass-name ".")
+           ns (clojure.main/demunge (subs klass-name 0 last-idx-dot))
+           c (subs klass-name (inc last-idx-dot))]
        @(or (find-var (symbol ns c))
             (find-var (symbol ns (clojure.main/demunge c)))))))
 
@@ -1138,7 +1081,7 @@
 #?(:clj
    (defn props [component]
      {:pre [(component? component)]}
-     (:omcljs$value (p/-props component))))
+     (:omcljs$value (:props component))))
 
 #?(:cljs
    (defn props
@@ -1187,7 +1130,7 @@
      {:pre [(component? component)]}
      (if (satisfies? ILocalState component)
        (-set-state! component new-state)
-       (reset! (p/-local-state component) new-state))))
+       (reset! (:state component) new-state))))
 
 #?(:cljs
    (defn set-state!
@@ -1214,7 +1157,7 @@
    (let [cst (if #?(:clj  (satisfies? ILocalState component)
                     :cljs (implements? ILocalState component))
                  (-get-state component)
-               #?(:clj  @(p/-local-state component)
+               #?(:clj  @(:state component)
                   :cljs (when-let [state (. component -state)]
                           (or (gobj/get state "omcljs$pendingState")
                               (gobj/get state "omcljs$state")))))]
@@ -1274,6 +1217,8 @@
 (declare full-query to-env schedule-sends! reconciler? ref->components force)
 
 (defn gather-sends
+  "Given an environment, a query and a set of remotes return a hash map of remotes
+   mapped to the query specific to that remote."
   [{:keys [parser] :as env} q remotes]
   (into {}
     (comp
@@ -1331,6 +1276,7 @@
                 (get-reconciler x)
                 x)
          c    (when (component? x) x)
+         xs   (if-not (nil? c) [c] [])
          root (:root @(:state r))
          cfg  (:config r)
          st   (:state cfg)
@@ -1361,6 +1307,8 @@
            sends (gather-sends (to-env cfg)
                    (into (or rootq []) (transform-reads r reads)) (:remotes cfg))]
        (when-not (empty? sends)
+         (doseq [[remote _] sends]
+           (p/queue! r xs remote))
          (p/queue-sends! r sends)
          (schedule-sends! r)))
      nil)))
@@ -1402,13 +1350,13 @@
 (defn react-ref
   "Returns the component associated with a component's React ref."
   [component name]
-  #?(:clj  (some-> @(p/-refs component) (get name))
+  #?(:clj  (some-> @(:refs component) (get name))
      :cljs (some-> (.-refs component) (gobj/get name))))
 
 (defn children
   "Returns the component's children."
   [component]
-  #?(:clj  (p/-children component)
+  #?(:clj  (:children component)
      :cljs (.. component -props -children)))
 
 #?(:cljs
@@ -1562,15 +1510,25 @@
                     (glog/info l
                       (str (when ref (str (pr-str ref) " "))
                         "transacted '" tx ", " (pr-str id))))])
+        old-state @(:state cfg)
         v    ((:parser cfg) env tx)
         snds (gather-sends env tx (:remotes cfg))
-        q    (cond-> []
+        xs   (cond-> []
                (not (nil? c)) (conj c)
                (not (nil? ref)) (conj ref))]
-    (p/queue! r (into q (remove symbol?) (keys v)))
+    (p/queue! r (into xs (remove symbol?) (keys v)))
     (when-not (empty? snds)
+      (doseq [[remote _] snds]
+        (p/queue! r xs remote))
       (p/queue-sends! r snds)
       (schedule-sends! r))
+    (when-let [f (:tx-listen cfg)]
+      (let [tx-data (merge env
+                      {:old-state old-state
+                       :new-state @(:state cfg)})]
+        (f tx-data {:tx tx
+                    :ret v
+                    :sends snds})))
     v))
 
 (defn annotate-mutations
@@ -1965,7 +1923,7 @@
            (if-not (nil? q)
              (replace q query)
              (throw
-               (ex-info (str "No queries exist for component path " cp " or data path " path')
+               (ex-info (str "No queries exist at the intersection of component path " cp " and data path " path')
                  {:type :om.next/no-queries}))))
          (throw
            (ex-info (str "No queries exist for component path " cp)
@@ -2263,10 +2221,13 @@
     (if (util/join? join)
       (if (query-root? join)
         (conj result-roots [join path])
-        (mapcat
-          #(move-roots % result-roots
-            (conj path (util/join-key join)))
-          (util/join-value join)))
+        (let [joinvalue (util/join-value join)]
+          (if (vector? joinvalue)
+            (mapcat
+             #(move-roots % result-roots
+                          (conj path (util/join-key join)))
+             joinvalue)
+            result-roots)))
       result-roots)))
 
 (defn- merge-joins
@@ -2361,11 +2322,14 @@
   ([reconciler delta]
     (merge! reconciler delta nil))
   ([reconciler delta query]
+   (merge! reconciler delta query nil))
+  ([reconciler delta query remote]
    (let [config (:config reconciler)
          state (:state config)
          merge* (:merge config)
          {:keys [keys next tempids]} (merge* reconciler @state delta query)]
-     (p/queue! reconciler keys)
+     (when (nil? remote)
+       (p/queue! reconciler keys))
      (reset! state
        (if-let [migrate (:migrate config)]
          (merge (select-keys next [:om.next/queries])
@@ -2407,7 +2371,9 @@
                                   #?@(:cljs [(not (nil? target)) ((:root-render config) (rctor data) target)])
                                   (nil? @ret) (rctor data)
                                   :else (when-let [c' @ret]
-                                          #?(:clj c'
+                                          #?(:clj (do
+                                                    (reset! ret nil)
+                                                    (rctor data))
                                              :cljs (when (mounted? c')
                                                      (.forceUpdate c' data)))))]
                           (when (and (nil? @ret) (not (nil? c)))
@@ -2448,12 +2414,17 @@
               (when-let [send (:send config)]
                 (send snds
                   (fn send-cb
-                    ([res]
-                     (merge! this res nil)
+                    ([resp]
+                     (merge! this resp nil)
                      (renderf ((:parser config) env sel)))
-                    ([res query]
-                     (merge! this res query)
-                     (renderf ((:parser config) env sel)))))))))
+                    ([resp query]
+                     (merge! this resp query)
+                     (renderf ((:parser config) env sel)))
+                    ([resp query remote]
+                     (when-not (nil? remote)
+                       (p/queue! this (keys resp) remote))
+                     (merge! this resp query remote)
+                     (p/reconcile! this remote))))))))
         @ret)))
 
   (remove-root! [_ target]
@@ -2467,8 +2438,12 @@
               c (first (get-in @indexer [:class->components root]))]
           (p/index-root indexer (or c root))))))
 
-  (queue! [_ ks]
-    (swap! state update-in [:queue] into ks))
+  (queue! [this ks]
+    (p/queue! this ks nil))
+  (queue! [_ ks remote]
+    (if-not (nil? remote)
+      (swap! state update-in [:remote-queue remote] into ks)
+      (swap! state update-in [:queue] into ks)))
 
   (queue-sends! [_ sends]
     (swap! state update-in [:queued-sends]
@@ -2488,12 +2463,18 @@
         true)
       false))
 
-  ;; TODO: need to reindex roots after reconcilation
   (reconcile! [this]
+    (p/reconcile! this nil))
+  ;; TODO: need to reindex roots after reconcilation
+  (reconcile! [this remote]
     (let [st @state
-          q  (:queue st)]
+          q (if-not (nil? remote)
+              (get-in st [:remote-queue remote])
+              (:queue st))]
       (swap! state update-in [:queued] not)
-      (swap! state assoc :queue [])
+      (if (not (nil? remote))
+        (swap! state assoc-in [:remote-queue remote] [])
+        (swap! state assoc :queue []))
       (if (empty? q)
         ;; TODO: need to move root re-render logic outside of batching logic
         ((:render st))
@@ -2547,10 +2528,15 @@
               (assoc :sends-queued false))))
         ((:send config) sends
           (fn send-cb
-            ([res]
-             (merge! this res nil))
-            ([res query]
-             (merge! this res query))))))))
+            ([resp]
+             (merge! this resp nil))
+            ([resp query]
+             (merge! this resp query))
+            ([resp query remote]
+             (when-not (nil? remote)
+               (p/queue! this (keys resp) remote))
+             (merge! this resp query remote)
+             (p/reconcile! this remote))))))))
 
 (defn default-ui->props
   [{:keys [parser #?(:clj pathopt :cljs ^boolean pathopt)] :as env} c]
@@ -2569,9 +2555,10 @@
                       :cljs (system-time))]
             #?(:cljs
                (when-let [l (:logger env)]
-                 (let [dt (- e s)]
+                 (let [dt (- e s)
+                       component-name (.. c -constructor -displayName)]
                    (when (< 16 dt)
-                     (glog/warning l (str c " query took " dt " msecs"))))))
+                     (glog/warning l (str component-name " query took " dt " msecs"))))))
             (get-in ui (path c))))))))
 
 (defn default-merge-ident
@@ -2729,7 +2716,12 @@
      :root-render  - the root render function. Defaults to ReactDOM.render
      :root-unmount - the root unmount function. Defaults to
                      ReactDOM.unmountComponentAtNode
-     :logger       - supply a goog.log compatible logger"
+     :logger       - supply a goog.log compatible logger
+     :tx-listen    - a function of 2 arguments that will listen to transactions.
+                     The first argument is the parser's env map also containing
+                     the old and new state. The second argument is a map containing
+                     the transaction, its result and the remote sends that the
+                     transaction originated."
   [{:keys [state shared shared-fn
            parser indexer
            ui->props normalize
@@ -2741,7 +2733,7 @@
            root-render root-unmount
            pathopt
            migrate id-key
-           instrument
+           instrument tx-listen
            easy-reads]
     :or {ui->props    default-ui->props
          indexer      om.next/indexer
@@ -2783,9 +2775,11 @@
                   :root-render root-render :root-unmount root-unmount
                   :logger logger :pathopt pathopt
                   :migrate migrate :id-key id-key
-                  :instrument instrument
+                  :instrument instrument :tx-listen tx-listen
                   :easy-reads easy-reads}
-                 (atom {:queue [] :queued false :queued-sends {}
+                 (atom {:queue []
+                        :remote-queue {}
+                        :queued false :queued-sends {}
                         :sends-queued false
                         :target nil :root nil :render nil :remove nil
                         :t 0 :normalized norm?}))]
@@ -2795,7 +2789,9 @@
   "Returns true if x is a reconciler."
   #?(:cljs {:tag boolean})
   [x]
-  (instance? Reconciler x))
+  #?(:cljs (implements? p/IReconciler x)
+     :clj  (or (instance? om.next.protocols.IReconciler x)
+               (satisfies? p/IReconciler x))))
 
 (defn app-state
   "Return the reconciler's application state atom. Useful when the reconciler

@@ -66,7 +66,7 @@
     [:cycles :mouse :drop])
   Object
   (render [this]
-    (let [{:keys [cycles mouse drop]} (om/props this)]
+    (let [{:keys [cycles mouse drop zoom]} (om/props this)]
       (dom/div #js{:style #js{:width "100%"}}
         (dom/h1 #js{:style #js{:position "absolute" :zIndex -1}} "Unicycle")
         (apply web/a-scene {:id "scene"
@@ -76,7 +76,7 @@
                          :key :camera-with-cursor
                          :position [0 0 -5]
                          :rotation [180 0 180]
-                         :camera {:active true}
+                         :camera {:active true :zoom 2}
                          :wasd-controls "adInverted: true; wsInverted: true"})
           (web/a-entity {:id "drop"
                          :key :drop-shadow
@@ -113,6 +113,7 @@
    #(let [Δ (* -0.0002 (:deltaY params))
           n (count (:cycles @app-state))]
      (swap! app-state update :drop + Δ)
+     (swap! app-state update :zoom + (* 100 Δ))
      (dotimes [i n] ;todo: normalize drop
        (swap! app-state update-in [:cycles i :kρ] + (* Δ 10))
        (swap! app-state update-in [:cycles i :kϕ] + (* Δ 20))

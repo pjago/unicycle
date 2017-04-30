@@ -1,8 +1,12 @@
 (ns clojure.core.matrix.protocols
   "Namespace for core.matrix protocols. These protocols are intended to be implemented by
-   core.matrix array implemntations.
+   core.matrix array implementations.
 
-   End users should normally avoid using this namespace directly
+   Note to implementers:
+    - Please read the docstrings for the protocols you are implementing!
+    - Protocols should be implemented correctly to achieve a compliant core.matrix implementations
+
+   core.matrix users should normally avoid using this namespace directly
    and instead use the functions in the main clojure.core.matrix API"
   (:require [clojure.core.matrix.utils :refer [same-shape-object?]]
             [clojure.core.matrix.impl.mathsops :as mops])
@@ -153,9 +157,10 @@
   (element-type [m]))
 
 (defprotocol PArrayMetrics
-  "Option protocol for quick determination of array matrics"
+  "Optional protocol for quick determination of array matrics"
   (nonzero-count [m]
-    "Returns the number of non-zero values in a numerical array. May throw an exception if the array is not numerical."))
+    "Returns the number of non-zero elements in a numerical array. 
+     May throw an exception if the array is not numerical."))
 
 (defprotocol PValidateShape
   "Optional protocol to validate the shape of a matrix. If the matrix has an incorrect shape, should
@@ -347,11 +352,11 @@
 
 (defprotocol PMatrixRows
   "Protocol for accessing rows of a matrix"
-  (get-rows [m] "Returns the rows of a matrix, as a sequence"))
+  (get-rows [m] "Returns the rows of a matrix, as a seqable object"))
 
 (defprotocol PMatrixColumns
   "Protocol for accessing columns of a matrix"
-  (get-columns [m] "Returns the columns of a matrix, as a sequence"))
+  (get-columns [m] "Returns the columns of a matrix, as a seqable object"))
 
 (defprotocol PSliceView
   "Protocol for quick view access into a row-major slices of an array. If implemented, must return
@@ -519,9 +524,10 @@
 
 (defprotocol PMatrixProducts
   "Protocol for general inner and outer products of numerical arrays.
-   Products should use + and * as normally defined for numerical types"
+   Products should use + and * as normally defined for numerical types."
   (inner-product [m a] "Returns the inner product of two numerical arrays.")
-  (outer-product [m a] "Returns the outer product of two numerical arrays."))
+  (outer-product [m a] "Returns the outer product of two numerical arrays. Implementation
+                        may return nil to indicate that a default computation should be used."))
 
 (defprotocol PAddProduct
   "Optional protocol for add-product operation.
@@ -684,11 +690,16 @@
 (defprotocol PTranspose
   "Protocol for array transpose operation"
   (transpose [m]
-    "Returns the transpose of a matrix. Equivalent to reversing the \"shape\".
+    "Returns the transpose of an array. Equivalent to reversing the \"shape\".
      Note that:
      - The transpose of a scalar is the same scalar
      - The transpose of a 1D vector is the same 1D vector
      - The transpose of a 2D matrix swaps rows and columns"))
+
+(defprotocol PTransposeDims
+  "Protocol for generalised array transpose operation"
+  (transpose-dims [m order]
+    "Returns the transpose of an array, reordering the dimensions in the specified order."))
 
 (defprotocol PRotate
   "Rotates an array along a specified dimension by the given number of places.
@@ -791,10 +802,10 @@
      Must throw an error if the matrix is not square (i.e. different number of rows and columns)")
   (determinant [m]
     "Returns the determinant of a matrix. May return nil if the implementation is unable
-     to compute determinants.
+     to compute determinants, in which case a default implementation will be tried.
      Must throw an error if the matrix is not square (i.e. different number of rows and columns)")
   (inverse [m]
-    "Returns the invese of a matrix. Should return nil if m is not invertible."))
+    "Returns the inverse of a matrix. Should return nil if m is not invertible."))
 
 (defprotocol PNegation
   (negate [m]
@@ -995,13 +1006,24 @@ would often be a numeric base type)."
     [m f a more]
     "Maps f over all slices of m (and optionally other arrays)"))
 
+(defprotocol PFilterSlices
+  "Filters the slices of the given array, returning only those which satisfy the given predicate."
+  (filter-slices
+    [m f]
+    "Runs f on all slices of m. Must return those slices which satisfy (f slice).
+     Must return nil if no slices meet the predicate.
+     Must return either a new seqable array containing the filtered slices or a vector of slices
+     (both of which are valid core.matrix arrays)"))
+
 (defprotocol PFunctionalOperations
   "Protocol to allow functional-style operations on matrix elements."
   ;; note that protocols don't like variadic args, so we convert to regular args
   ;; also the matrix type must be first for protocol dispatch, so we move it before f
   (element-seq
     [m]
-    "Must return a seqable object containing all elements of the matrix, in row-major order.")
+    "Must return a seqable object containing all elements of the matrix, in row-major order.
+     i.e. it must be possible to call clojure.core/seq on the result. Valid sequable objects may
+     include Java arrays, Clojure vectors/sequences, and any Java object that implement Iterable.")
   (element-map
     [m f]
     [m f a]
@@ -1020,7 +1042,8 @@ would often be a numeric base type)."
   (element-reduce
     [m f]
     [m f init]
-    "Reduces with the function f over all elements of m."))
+    "Reduces with the function f over all elements of m.
+     Implementations do not need to support clojure.core/reduced"))
 
 (defprotocol PMapIndexed
   "Protocol for map-indexed operation on matrices"
@@ -1110,7 +1133,7 @@ would often be a numeric base type)."
 
 (defprotocol PIndicesSetting
   "Protocol for setting elements of an array at the specified indices"
-  (set-indices [a indices values] "sets the elements from a at indices to values")
+  (set-indices [a indices values] "sets the elements from a at indices to values. Returns a new array.")
   (set-indices! [a indices values] "destructively sets the elements from a at indices to values"))
 
 (defprotocol PNonZeroIndices
@@ -1142,6 +1165,13 @@ would often be a numeric base type)."
    last dimension."
   (column-name [m column] "Returns the label at a specific column")
   (column-names [m] "Returns all labels along the columns on an array"))
+
+(defprotocol PColumnIndex
+  "Protocol for getting the index of a named column. Works on any array with labelled columns.
+   If the dimensionality is 1, assumes that columns are the only dimension (i.e. can be applied to
+   dataset rows and Clojure maps in the natural way)
+   Returns an integer index if the column is found, nil otherwise."
+  (column-index [m column-label] "Returns the index of the specified column label"))
 
 ;; ==========================================================
 ;; LINEAR ALGEBRA PROTOCOLS
@@ -1188,16 +1218,20 @@ would often be a numeric base type)."
   (select-columns [ds cols] "Produces a new dataset with the columns in the specified order")
   (select-rows [ds rows] "Produces a new dataset with specified rows")
   (add-column [ds col-name col] "Adds column to the dataset")
-  (to-map [ds] "Returns map of columns with associated list of values")
-  (row-maps [ds] "Returns seq of maps with row values")
   (merge-datasets [ds1 ds2] "Returns a dataset created by combining columns of the given datasets. In case of columns with duplicate names, last-one-wins strategy is applied")
   (rename-columns [ds col-map] "Renames columns based on map of old new column name pairs")
   (replace-column [ds col-name vs] "Replaces column in a dataset with new values")
   (join-rows [ds1 ds2] "Returns a dataset created by combining the rows of the given datasets")
   (join-columns [ds1 ds2] "Returns a dataset created by combining the columns of the given datasets"))
 
+(defprotocol PDatasetMaps
+  (to-map [ds] "Returns map of columns with associated list of values")
+  (row-maps [ds] "Returns seq of maps with row values"))
+
 ;; ============================================================
 ;; Utility functions
+;;
+;; Intended for use in protocol implementations
 
 (defn persistent-vector-coerce
   "Coerces a data structure to nested persistent vectors"

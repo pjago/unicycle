@@ -14,27 +14,19 @@
   (remove-root! [reconciler target])
   (schedule-render! [reconciler])
   (schedule-sends! [reconciler])
-  (queue! [reconciler ks])
+  (queue! [reconciler ks] [reconciler ks remote])
   (queue-sends! [reconciler sends])
   (reindex! [reconciler])
-  (reconcile! [reconciler])
+  (reconcile! [reconciler] [reconciler remote])
   (send! [reconciler]))
-
 
 #?(:clj
    (defprotocol IReactDOMElement
      (^String -render-to-string [this react-id ^StringBuilder sb] "renders a DOM node to string.")))
 
 #?(:clj
-   (defprotocol IReactChildren
-     (-children [this] "returns the element's children")))
-
-#?(:clj
    (defprotocol IReactComponent
-     (-render [this] "must return a valid ReactDOMElement.")
-     (-props [this])
-     (-refs [this])
-     (-local-state [this])))
+     (-render [this] "must return a valid ReactDOMElement.")))
 
 #?(:clj
    (defprotocol IReactLifecycle

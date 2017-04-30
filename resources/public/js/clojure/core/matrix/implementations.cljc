@@ -16,6 +16,8 @@
    keyword type is requested."
   (array-map
    :vectorz 'mikera.vectorz.matrix-api
+   :vectorz-opencl 'mikera.vectorz.opencl-api
+   :neanderthal 'uncomplicate.neanderthal.impl.matrix-api
    :clojure 'clojure.core.matrix.impl.clojure
    :ndarray 'clojure.core.matrix.impl.ndarray-object
    :ndarray-double 'clojure.core.matrix.impl.ndarray-double
@@ -35,6 +37,7 @@
    :ejml :TODO
    :nd4j 'nd4clj.kiw
    :ujmp :TODO
+   :weka 'clj-ml.matrix-api
    :commons-math 'apache-commons-matrix.core
    :mtj 'cav.mtj.core.matrix
    :aljabr 'thinktopic.aljabr.core))
@@ -50,6 +53,12 @@
 
    May be re-bound to temporarily use a different core.matrix implementation."
   DEFAULT-IMPLEMENTATION)
+
+(def ^:dynamic *numeric-implementation*
+  "A dynamic var specifying the current core.matrix numeric implementation in use.
+
+   May be re-bound to temporarily use a different core.matrix implementation."
+  :ndarray-double)
 
 (defonce
   ^{:doc "A dynamic var supporting debugging option for core.matrix implementers.
@@ -161,10 +170,13 @@
     - A known keyword for the implementation e.g. :vectorz
     - An existing instance from the implementation
 
+   Throws an exception if the implementation cannot be loaded.
+
    This is used primarily for functions that construct new matrices, i.e. it determines the
    implementation used for expressions like: (matrix [[1 2] [3 4]])"
   ([m]
-    (when (keyword? m) (try-load-implementation m))
+    (when (keyword? m) 
+      (or (try-load-implementation m) (error "Unable to load matrix implementation: " m)))
     #?(:clj (alter-var-root (var *matrix-implementation*)
                     (fn [_] (get-implementation-key m)))
        :cljs (set! *matrix-implementation* (get-implementation-key m)))))

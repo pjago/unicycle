@@ -1,4 +1,4 @@
-// Compiled by ClojureScript 1.9.456 {}
+// Compiled by ClojureScript 1.9.521 {}
 goog.provide('clojure.core.matrix.implementations');
 goog.require('cljs.core');
 goog.require('clojure.core.matrix.protocols');
@@ -9,7 +9,7 @@ goog.require('clojure.core.matrix.macros');
  * core.matrix will attempt to load these namespaces when an array of the specified
  * keyword type is requested.
  */
-clojure.core.matrix.implementations.KNOWN_IMPLEMENTATIONS = (new cljs.core.PersistentArrayMap(null,(23),[new cljs.core.Keyword(null,"vectorz","vectorz",1550942815),new cljs.core.Symbol(null,"mikera.vectorz.matrix-api","mikera.vectorz.matrix-api",-1304124502,null),new cljs.core.Keyword(null,"clojure","clojure",438975815),new cljs.core.Symbol(null,"clojure.core.matrix.impl.clojure","clojure.core.matrix.impl.clojure",503611357,null),new cljs.core.Keyword(null,"ndarray","ndarray",1659822393),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray-object","clojure.core.matrix.impl.ndarray-object",-213967717,null),new cljs.core.Keyword(null,"ndarray-double","ndarray-double",-159242597),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray-double","clojure.core.matrix.impl.ndarray-double",-2055462494,null),new cljs.core.Keyword(null,"ndarray-float","ndarray-float",440096342),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray","clojure.core.matrix.impl.ndarray",-1263457743,null),new cljs.core.Keyword(null,"ndarray-long","ndarray-long",-219375229),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray","clojure.core.matrix.impl.ndarray",-1263457743,null),new cljs.core.Keyword(null,"persistent-vector","persistent-vector",2032618025),new cljs.core.Symbol(null,"clojure.core.matrix.impl.persistent-vector","clojure.core.matrix.impl.persistent-vector",-1383679619,null),new cljs.core.Keyword(null,"persistent-map","persistent-map",1676752549),new cljs.core.Symbol(null,"clojure.core.matrix.impl.sparse-map","clojure.core.matrix.impl.sparse-map",-680801962,null),new cljs.core.Keyword(null,"sequence","sequence",926807414),new cljs.core.Symbol(null,"clojure.core.matrix.impl.sequence","clojure.core.matrix.impl.sequence",-188268595,null),new cljs.core.Keyword(null,"double-array","double-array",-1383495801),new cljs.core.Symbol(null,"clojure.core.matrix.impl.double-array","clojure.core.matrix.impl.double-array",1708458108,null),new cljs.core.Keyword(null,"scalar-wrapper","scalar-wrapper",-1626299275),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"slice-wrapper","slice-wrapper",449772415),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"nd-wrapper","nd-wrapper",563497943),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"dataset","dataset",1159262238),new cljs.core.Symbol(null,"clojure.core.matrix.impl.dataset","clojure.core.matrix.impl.dataset",750993460,null),new cljs.core.Keyword(null,"jblas","jblas",609262767),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"clatrix","clatrix",-547812428),new cljs.core.Symbol(null,"clatrix.core","clatrix.core",972957352,null),new cljs.core.Keyword(null,"parallel-colt","parallel-colt",629381018),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"ejml","ejml",964957572),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"nd4j","nd4j",-1907957110),new cljs.core.Symbol(null,"nd4clj.kiw","nd4clj.kiw",-1874915324,null),new cljs.core.Keyword(null,"ujmp","ujmp",-838348489),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"commons-math","commons-math",-1283490548),new cljs.core.Symbol(null,"apache-commons-matrix.core","apache-commons-matrix.core",1260886815,null),new cljs.core.Keyword(null,"mtj","mtj",1143798319),new cljs.core.Symbol(null,"cav.mtj.core.matrix","cav.mtj.core.matrix",349644007,null),new cljs.core.Keyword(null,"aljabr","aljabr",1424034715),new cljs.core.Symbol(null,"thinktopic.aljabr.core","thinktopic.aljabr.core",-1050414454,null)],null));
+clojure.core.matrix.implementations.KNOWN_IMPLEMENTATIONS = (new cljs.core.PersistentArrayMap(null,(26),[new cljs.core.Keyword(null,"vectorz","vectorz",1550942815),new cljs.core.Symbol(null,"mikera.vectorz.matrix-api","mikera.vectorz.matrix-api",-1304124502,null),new cljs.core.Keyword(null,"vectorz-opencl","vectorz-opencl",-1227300990),new cljs.core.Symbol(null,"mikera.vectorz.opencl-api","mikera.vectorz.opencl-api",929622627,null),new cljs.core.Keyword(null,"neanderthal","neanderthal",133200757),new cljs.core.Symbol(null,"uncomplicate.neanderthal.impl.matrix-api","uncomplicate.neanderthal.impl.matrix-api",522937898,null),new cljs.core.Keyword(null,"clojure","clojure",438975815),new cljs.core.Symbol(null,"clojure.core.matrix.impl.clojure","clojure.core.matrix.impl.clojure",503611357,null),new cljs.core.Keyword(null,"ndarray","ndarray",1659822393),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray-object","clojure.core.matrix.impl.ndarray-object",-213967717,null),new cljs.core.Keyword(null,"ndarray-double","ndarray-double",-159242597),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray-double","clojure.core.matrix.impl.ndarray-double",-2055462494,null),new cljs.core.Keyword(null,"ndarray-float","ndarray-float",440096342),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray","clojure.core.matrix.impl.ndarray",-1263457743,null),new cljs.core.Keyword(null,"ndarray-long","ndarray-long",-219375229),new cljs.core.Symbol(null,"clojure.core.matrix.impl.ndarray","clojure.core.matrix.impl.ndarray",-1263457743,null),new cljs.core.Keyword(null,"persistent-vector","persistent-vector",2032618025),new cljs.core.Symbol(null,"clojure.core.matrix.impl.persistent-vector","clojure.core.matrix.impl.persistent-vector",-1383679619,null),new cljs.core.Keyword(null,"persistent-map","persistent-map",1676752549),new cljs.core.Symbol(null,"clojure.core.matrix.impl.sparse-map","clojure.core.matrix.impl.sparse-map",-680801962,null),new cljs.core.Keyword(null,"sequence","sequence",926807414),new cljs.core.Symbol(null,"clojure.core.matrix.impl.sequence","clojure.core.matrix.impl.sequence",-188268595,null),new cljs.core.Keyword(null,"double-array","double-array",-1383495801),new cljs.core.Symbol(null,"clojure.core.matrix.impl.double-array","clojure.core.matrix.impl.double-array",1708458108,null),new cljs.core.Keyword(null,"scalar-wrapper","scalar-wrapper",-1626299275),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"slice-wrapper","slice-wrapper",449772415),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"nd-wrapper","nd-wrapper",563497943),new cljs.core.Symbol(null,"clojure.core.matrix.impl.wrappers","clojure.core.matrix.impl.wrappers",1214427365,null),new cljs.core.Keyword(null,"dataset","dataset",1159262238),new cljs.core.Symbol(null,"clojure.core.matrix.impl.dataset","clojure.core.matrix.impl.dataset",750993460,null),new cljs.core.Keyword(null,"jblas","jblas",609262767),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"clatrix","clatrix",-547812428),new cljs.core.Symbol(null,"clatrix.core","clatrix.core",972957352,null),new cljs.core.Keyword(null,"parallel-colt","parallel-colt",629381018),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"ejml","ejml",964957572),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"nd4j","nd4j",-1907957110),new cljs.core.Symbol(null,"nd4clj.kiw","nd4clj.kiw",-1874915324,null),new cljs.core.Keyword(null,"ujmp","ujmp",-838348489),new cljs.core.Keyword(null,"TODO","TODO",-523795145),new cljs.core.Keyword(null,"weka","weka",195496388),new cljs.core.Symbol(null,"clj-ml.matrix-api","clj-ml.matrix-api",-1914744527,null),new cljs.core.Keyword(null,"commons-math","commons-math",-1283490548),new cljs.core.Symbol(null,"apache-commons-matrix.core","apache-commons-matrix.core",1260886815,null),new cljs.core.Keyword(null,"mtj","mtj",1143798319),new cljs.core.Symbol(null,"cav.mtj.core.matrix","cav.mtj.core.matrix",349644007,null),new cljs.core.Keyword(null,"aljabr","aljabr",1424034715),new cljs.core.Symbol(null,"thinktopic.aljabr.core","thinktopic.aljabr.core",-1050414454,null)],null));
 /**
  * The default implementation used in core.matrix. Currently set to `:persistent-vector` for maximum
  * compatibility with regular Clojure code.
@@ -21,6 +21,12 @@ clojure.core.matrix.implementations.DEFAULT_IMPLEMENTATION = new cljs.core.Keywo
  * May be re-bound to temporarily use a different core.matrix implementation.
  */
 clojure.core.matrix.implementations._STAR_matrix_implementation_STAR_ = clojure.core.matrix.implementations.DEFAULT_IMPLEMENTATION;
+/**
+ * A dynamic var specifying the current core.matrix numeric implementation in use.
+ * 
+ * May be re-bound to temporarily use a different core.matrix implementation.
+ */
+clojure.core.matrix.implementations._STAR_numeric_implementation_STAR_ = new cljs.core.Keyword(null,"ndarray-double","ndarray-double",-159242597);
 if(typeof clojure.core.matrix.implementations._STAR_debug_options_STAR_ !== 'undefined'){
 } else {
 /**
@@ -63,23 +69,23 @@ return clojure.core.matrix.protocols.implementation_key.call(null,m);
  * when they are loaded, once for each implementation keyword registered. Safe to call multiple times.
  */
 clojure.core.matrix.implementations.register_implementation = (function clojure$core$matrix$implementations$register_implementation(var_args){
-var args33392 = [];
-var len__21896__auto___33395 = arguments.length;
-var i__21897__auto___33396 = (0);
+var args32673 = [];
+var len__28543__auto___32679 = arguments.length;
+var i__28544__auto___32680 = (0);
 while(true){
-if((i__21897__auto___33396 < len__21896__auto___33395)){
-args33392.push((arguments[i__21897__auto___33396]));
+if((i__28544__auto___32680 < len__28543__auto___32679)){
+args32673.push((arguments[i__28544__auto___32680]));
 
-var G__33397 = (i__21897__auto___33396 + (1));
-i__21897__auto___33396 = G__33397;
+var G__32681 = (i__28544__auto___32680 + (1));
+i__28544__auto___32680 = G__32681;
 continue;
 } else {
 }
 break;
 }
 
-var G__33394 = args33392.length;
-switch (G__33394) {
+var G__32678 = args32673.length;
+switch (G__32678) {
 case 1:
 return clojure.core.matrix.implementations.register_implementation.cljs$core$IFn$_invoke$arity$1((arguments[(0)]));
 
@@ -89,7 +95,7 @@ return clojure.core.matrix.implementations.register_implementation.cljs$core$IFn
 
 break;
 default:
-throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args33392.length)].join('')));
+throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args32673.length)].join('')));
 
 }
 });
@@ -140,23 +146,23 @@ return clojure.core.matrix.implementations.try_load_implementation.call(null,clo
  * Returns nil if the implementation cannot be found.
  */
 clojure.core.matrix.implementations.get_canonical_object = (function clojure$core$matrix$implementations$get_canonical_object(var_args){
-var args33399 = [];
-var len__21896__auto___33402 = arguments.length;
-var i__21897__auto___33403 = (0);
+var args32686 = [];
+var len__28543__auto___32692 = arguments.length;
+var i__28544__auto___32693 = (0);
 while(true){
-if((i__21897__auto___33403 < len__21896__auto___33402)){
-args33399.push((arguments[i__21897__auto___33403]));
+if((i__28544__auto___32693 < len__28543__auto___32692)){
+args32686.push((arguments[i__28544__auto___32693]));
 
-var G__33404 = (i__21897__auto___33403 + (1));
-i__21897__auto___33403 = G__33404;
+var G__32694 = (i__28544__auto___32693 + (1));
+i__28544__auto___32693 = G__32694;
 continue;
 } else {
 }
 break;
 }
 
-var G__33401 = args33399.length;
-switch (G__33401) {
+var G__32690 = args32686.length;
+switch (G__32690) {
 case 0:
 return clojure.core.matrix.implementations.get_canonical_object.cljs$core$IFn$_invoke$arity$0();
 
@@ -166,7 +172,7 @@ return clojure.core.matrix.implementations.get_canonical_object.cljs$core$IFn$_i
 
 break;
 default:
-throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args33399.length)].join('')));
+throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args32686.length)].join('')));
 
 }
 });
@@ -179,17 +185,17 @@ clojure.core.matrix.implementations.get_canonical_object.cljs$core$IFn$_invoke$a
 var k = clojure.core.matrix.implementations.get_implementation_key.call(null,m);
 var obj = cljs.core.deref.call(null,clojure.core.matrix.implementations.canonical_objects).call(null,k);
 if(cljs.core.truth_(k)){
-var or__20675__auto__ = obj;
-if(cljs.core.truth_(or__20675__auto__)){
-return or__20675__auto__;
+var or__27322__auto__ = obj;
+if(cljs.core.truth_(or__27322__auto__)){
+return or__27322__auto__;
 } else {
-var or__20675__auto____$1 = (cljs.core.truth_(clojure.core.matrix.implementations.try_load_implementation.call(null,k))?cljs.core.deref.call(null,clojure.core.matrix.implementations.canonical_objects).call(null,k):null);
-if(cljs.core.truth_(or__20675__auto____$1)){
-return or__20675__auto____$1;
+var or__27322__auto____$1 = (cljs.core.truth_(clojure.core.matrix.implementations.try_load_implementation.call(null,k))?cljs.core.deref.call(null,clojure.core.matrix.implementations.canonical_objects).call(null,k):null);
+if(cljs.core.truth_(or__27322__auto____$1)){
+return or__27322__auto____$1;
 } else {
-var or__20675__auto____$2 = (((m instanceof cljs.core.Keyword))?null:m);
-if(cljs.core.truth_(or__20675__auto____$2)){
-return or__20675__auto____$2;
+var or__27322__auto____$2 = (((m instanceof cljs.core.Keyword))?null:m);
+if(cljs.core.truth_(or__27322__auto____$2)){
+return or__27322__auto____$2;
 } else {
 return null;
 }
@@ -206,9 +212,9 @@ clojure.core.matrix.implementations.get_canonical_object.cljs$lang$maxFixedArity
  * Like get-canonical-object, except it throws an exception if the implementation cannot be found
  */
 clojure.core.matrix.implementations.get_canonical_object_or_throw = (function clojure$core$matrix$implementations$get_canonical_object_or_throw(mk){
-var or__20675__auto__ = clojure.core.matrix.implementations.get_canonical_object.call(null,mk);
-if(cljs.core.truth_(or__20675__auto__)){
-return or__20675__auto__;
+var or__27322__auto__ = clojure.core.matrix.implementations.get_canonical_object.call(null,mk);
+if(cljs.core.truth_(or__27322__auto__)){
+return or__27322__auto__;
 } else {
 throw cljs.core.ex_info.call(null,[cljs.core.str.cljs$core$IFn$_invoke$arity$1("Cannot find implementation for "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(mk)].join(''),cljs.core.PersistentArrayMap.EMPTY);
 }
@@ -218,13 +224,13 @@ throw cljs.core.ex_info.call(null,[cljs.core.str.cljs$core$IFn$_invoke$arity$1("
  * returns another array type.
  */
 clojure.core.matrix.implementations.construct = (function clojure$core$matrix$implementations$construct(m,data){
-var or__20675__auto__ = clojure.core.matrix.protocols.construct_matrix.call(null,m,data);
-if(cljs.core.truth_(or__20675__auto__)){
-return or__20675__auto__;
+var or__27322__auto__ = clojure.core.matrix.protocols.construct_matrix.call(null,m,data);
+if(cljs.core.truth_(or__27322__auto__)){
+return or__27322__auto__;
 } else {
-var or__20675__auto____$1 = clojure.core.matrix.protocols.coerce_param.call(null,m,data);
-if(cljs.core.truth_(or__20675__auto____$1)){
-return or__20675__auto____$1;
+var or__27322__auto____$1 = clojure.core.matrix.protocols.coerce_param.call(null,m,data);
+if(cljs.core.truth_(or__27322__auto____$1)){
+return or__27322__auto____$1;
 } else {
 return clojure.core.matrix.protocols.coerce_param.call(null,cljs.core.PersistentVector.EMPTY,data);
 }
@@ -237,16 +243,22 @@ return clojure.core.matrix.protocols.coerce_param.call(null,cljs.core.Persistent
  *  - A known keyword for the implementation e.g. :vectorz
  *  - An existing instance from the implementation
  * 
+ * Throws an exception if the implementation cannot be loaded.
+ * 
  * This is used primarily for functions that construct new matrices, i.e. it determines the
  * implementation used for expressions like: (matrix [[1 2] [3 4]])
  */
 clojure.core.matrix.implementations.set_current_implementation = (function clojure$core$matrix$implementations$set_current_implementation(m){
 if((m instanceof cljs.core.Keyword)){
-clojure.core.matrix.implementations.try_load_implementation.call(null,m);
+var or__27322__auto___32702 = clojure.core.matrix.implementations.try_load_implementation.call(null,m);
+if(cljs.core.truth_(or__27322__auto___32702)){
+} else {
+throw cljs.core.ex_info.call(null,[cljs.core.str.cljs$core$IFn$_invoke$arity$1("Unable to load matrix implementation: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(m)].join(''),cljs.core.PersistentArrayMap.EMPTY);
+}
 } else {
 }
 
 return clojure.core.matrix.implementations._STAR_matrix_implementation_STAR_ = clojure.core.matrix.implementations.get_implementation_key.call(null,m);
 });
 
-//# sourceMappingURL=implementations.js.map
+//# sourceMappingURL=implementations.js.map?rel=1493584916466

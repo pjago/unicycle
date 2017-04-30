@@ -1,6 +1,6 @@
 (ns unicycle.core
   (:refer-clojure :exclude [+ - * /])
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.spec :as s]
             [common.math :refer [π τ dt] :as a]
             [clojure.core.matrix :as m])
   (:use [clojure.core.matrix.operators :only [+ - * /]]))
@@ -50,7 +50,7 @@
 ;PLAN ;unpredictable path. todo: add map
 (defn uni-plan [{:keys [kρ kϕ ϵ]} [cmd ρ ϕ]]
   (let [D (if (<= ρ ϵ) 0 1)
-        S (- 1 (/ (Math/abs ϕ) π 2))
+        S (- 1 (/ (Math/abs ϕ) π 0.5))
         F (if-not (zero? ϕ) (m/signum ϕ) -1)
         υ (case cmd
             (:goto :avoid) (* kρ ρ)

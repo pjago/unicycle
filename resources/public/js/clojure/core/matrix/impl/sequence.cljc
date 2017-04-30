@@ -1,7 +1,9 @@
 (ns clojure.core.matrix.impl.sequence
   "Namepace implementing selected core.matrix protocols for clojure sequences.
 
-   WARNING: baecause they lack efficient indexed access, sequences are not efficient for many
+   Useful if you want to pass Clojure sequences directly to core.matrix functions.
+
+   WARNING: because they lack efficient indexed access, sequences will perform badly for most
    array operations. In general they should be converted to other implementations before use."
   (:require [clojure.core.matrix.protocols :as mp]
             [clojure.core.matrix.implementations :as imp]
@@ -90,8 +92,7 @@
 (extend-protocol mp/PMatrixColumns
   ISeq
     (get-columns [m]
-      ;; should be OK since :sequence should never the the current implementation
-      (let [m (mp/coerce-param imp/*matrix-implementation* m)]
+      (let [m (mp/coerce-param [] m)]
         (mp/get-columns m))))
 
 (extend-protocol mp/PSliceSeq2

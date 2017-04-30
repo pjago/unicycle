@@ -1,20 +1,20 @@
-// Compiled by ClojureScript 1.9.456 {}
+// Compiled by ClojureScript 1.9.521 {}
 goog.provide('om.util');
 goog.require('cljs.core');
 om.util.force_children = (function om$util$force_children(x){
-var G__29041 = x;
+var G__30848 = x;
 if(cljs.core.seq_QMARK_.call(null,x)){
-return cljs.core.into.call(null,cljs.core.PersistentVector.EMPTY,cljs.core.map.call(null,om.util.force_children),G__29041);
+return cljs.core.into.call(null,cljs.core.PersistentVector.EMPTY,cljs.core.map.call(null,om.util.force_children),G__30848);
 } else {
-return G__29041;
+return G__30848;
 }
 });
 om.util.union_QMARK_ = (function om$util$union_QMARK_(expr){
-var expr__$1 = (function (){var G__29043 = expr;
+var expr__$1 = (function (){var G__30850 = expr;
 if(cljs.core.seq_QMARK_.call(null,expr)){
-return cljs.core.first.call(null,G__29043);
+return cljs.core.first.call(null,G__30850);
 } else {
-return G__29043;
+return G__30850;
 }
 })();
 return (cljs.core.map_QMARK_.call(null,expr__$1)) && (cljs.core.map_QMARK_.call(null,cljs.core.second.call(null,cljs.core.first.call(null,expr__$1))));
@@ -58,11 +58,11 @@ om.util.recursion_QMARK_ = (function om$util$recursion_QMARK_(x){
 return (cljs.core.symbol_identical_QMARK_.call(null,new cljs.core.Symbol(null,"...","...",-1926939749,null),x)) || (typeof x === 'number');
 });
 om.util.mutation_QMARK_ = (function om$util$mutation_QMARK_(expr){
-var expr__$1 = (function (){var G__29097 = expr;
+var expr__$1 = (function (){var G__30852 = expr;
 if(cljs.core.seq_QMARK_.call(null,expr)){
-return cljs.core.first.call(null,G__29097);
+return cljs.core.first.call(null,G__30852);
 } else {
-return G__29097;
+return G__30852;
 }
 })();
 return (expr__$1 instanceof cljs.core.Symbol);
@@ -76,4 +76,4 @@ throw (new Error("Assert failed: (symbol? (first expr))"));
 return cljs.core.first.call(null,expr);
 });
 
-//# sourceMappingURL=util.js.map
+//# sourceMappingURL=util.js.map?rel=1493584911758
