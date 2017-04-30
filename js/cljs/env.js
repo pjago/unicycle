@@ -1,25 +1,25 @@
-// Compiled by ClojureScript 1.9.456 {}
+// Compiled by ClojureScript 1.9.521 {}
 goog.provide('cljs.env');
 goog.require('cljs.core');
 cljs.env._STAR_compiler_STAR_ = null;
 cljs.env.default_compiler_env = (function cljs$env$default_compiler_env(var_args){
-var args42760 = [];
-var len__21896__auto___42775 = arguments.length;
-var i__21897__auto___42777 = (0);
+var args32614 = [];
+var len__28543__auto___32619 = arguments.length;
+var i__28544__auto___32621 = (0);
 while(true){
-if((i__21897__auto___42777 < len__21896__auto___42775)){
-args42760.push((arguments[i__21897__auto___42777]));
+if((i__28544__auto___32621 < len__28543__auto___32619)){
+args32614.push((arguments[i__28544__auto___32621]));
 
-var G__42779 = (i__21897__auto___42777 + (1));
-i__21897__auto___42777 = G__42779;
+var G__32622 = (i__28544__auto___32621 + (1));
+i__28544__auto___32621 = G__32622;
 continue;
 } else {
 }
 break;
 }
 
-var G__42770 = args42760.length;
-switch (G__42770) {
+var G__32616 = args32614.length;
+switch (G__32616) {
 case 0:
 return cljs.env.default_compiler_env.cljs$core$IFn$_invoke$arity$0();
 
@@ -29,7 +29,7 @@ return cljs.env.default_compiler_env.cljs$core$IFn$_invoke$arity$1((arguments[(0
 
 break;
 default:
-throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args42760.length)].join('')));
+throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args32614.length)].join('')));
 
 }
 });
@@ -45,4 +45,4 @@ return cljs.core.atom.call(null,cljs.core.merge.call(null,new cljs.core.Persiste
 cljs.env.default_compiler_env.cljs$lang$maxFixedArity = 1;
 
 
-//# sourceMappingURL=env.js.map
+//# sourceMappingURL=env.js.map?rel=1493584916248

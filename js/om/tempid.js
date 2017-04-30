@@ -1,4 +1,4 @@
-// Compiled by ClojureScript 1.9.456 {}
+// Compiled by ClojureScript 1.9.521 {}
 goog.provide('om.tempid');
 goog.require('cljs.core');
 
@@ -52,8 +52,8 @@ om.tempid.TempId.cljs$lang$type = true;
 
 om.tempid.TempId.cljs$lang$ctorStr = "om.tempid/TempId";
 
-om.tempid.TempId.cljs$lang$ctorPrWriter = (function (this__21332__auto__,writer__21333__auto__,opt__21334__auto__){
-return cljs.core._write.call(null,writer__21333__auto__,"om.tempid/TempId");
+om.tempid.TempId.cljs$lang$ctorPrWriter = (function (this__27979__auto__,writer__27980__auto__,opt__27981__auto__){
+return cljs.core._write.call(null,writer__27980__auto__,"om.tempid/TempId");
 });
 
 om.tempid.__GT_TempId = (function om$tempid$__GT_TempId(id,__hash){
@@ -61,23 +61,23 @@ return (new om.tempid.TempId(id,__hash));
 });
 
 om.tempid.tempid = (function om$tempid$tempid(var_args){
-var args47671 = [];
-var len__21896__auto___47677 = arguments.length;
-var i__21897__auto___47678 = (0);
+var args52837 = [];
+var len__28543__auto___52840 = arguments.length;
+var i__28544__auto___52841 = (0);
 while(true){
-if((i__21897__auto___47678 < len__21896__auto___47677)){
-args47671.push((arguments[i__21897__auto___47678]));
+if((i__28544__auto___52841 < len__28543__auto___52840)){
+args52837.push((arguments[i__28544__auto___52841]));
 
-var G__47679 = (i__21897__auto___47678 + (1));
-i__21897__auto___47678 = G__47679;
+var G__52842 = (i__28544__auto___52841 + (1));
+i__28544__auto___52841 = G__52842;
 continue;
 } else {
 }
 break;
 }
 
-var G__47674 = args47671.length;
-switch (G__47674) {
+var G__52839 = args52837.length;
+switch (G__52839) {
 case 0:
 return om.tempid.tempid.cljs$core$IFn$_invoke$arity$0();
 
@@ -87,7 +87,7 @@ return om.tempid.tempid.cljs$core$IFn$_invoke$arity$1((arguments[(0)]));
 
 break;
 default:
-throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args47671.length)].join('')));
+throw (new Error([cljs.core.str.cljs$core$IFn$_invoke$arity$1("Invalid arity: "),cljs.core.str.cljs$core$IFn$_invoke$arity$1(args52837.length)].join('')));
 
 }
 });
@@ -106,4 +106,4 @@ om.tempid.tempid_QMARK_ = (function om$tempid$tempid_QMARK_(x){
 return (x instanceof om.tempid.TempId);
 });
 
-//# sourceMappingURL=tempid.js.map
+//# sourceMappingURL=tempid.js.map?rel=1493584945026

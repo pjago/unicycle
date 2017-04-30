@@ -723,7 +723,7 @@
               (loop [ret x i 0]
                 (if (< i (count specs))
                   (let [nret (conform* (specs i) ret)]
-                    (if (invalid? ret)
+                    (if (invalid? nret)
                       ::invalid
                       ;;propagate conformed values
                       (recur nret (inc i))))
@@ -793,9 +793,10 @@
   "Do not call this directly, use 'every', 'every-kv', 'coll-of' or 'map-of'"
   ([form pred opts] (every-impl form pred opts nil))
   ([form pred {gen-into :into
+               describe-form ::describe
                :keys [kind ::kind-form count max-count min-count distinct gen-max ::kfn ::cpred
                       conform-keys ::conform-all]
-               :or {gen-max 20, gen-into []}
+               :or {gen-max 20}
                :as opts}
     gfn]
    (let [conform-into gen-into
@@ -803,12 +804,6 @@
          check? #(valid? @spec %)
          kfn (c/or kfn (fn [i v] i))
          addcv (fn [ret i v cv] (conj ret cv))
-         [kindfn kindform] (cond
-                             (map? kind)  [map? `map?]
-                             (vector? kind)  [vector? `vector?]
-                             (list? kind)  [list? `list?]
-                             (set? kind) [set? `set?]
-                             :else [seqable? `seqable?])
          cfns (fn [x]
                 ;;returns a tuple of [init add complete] fns
                 (cond
@@ -912,7 +907,7 @@
                      (gen/vector pgen 0 gen-max))))))))
 
        (with-gen* [_ gfn] (every-impl form pred opts gfn))
-       (describe* [_] `(every ~form ~@(mapcat identity opts)))))))
+       (describe* [_] (c/or describe-form `(every ~(s/mres form) ~@(mapcat identity opts))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;; regex ;;;;;;;;;;;;;;;;;;;
 ;;See:
@@ -1375,7 +1370,7 @@
             [[1 (gen/delay (gen/return nil))]
              [9 (gen/delay (gensub pred overrides (conj path ::pred) rmap form))]])))
       (with-gen* [_ gfn] (nilable-impl form pred gfn))
-      (describe* [_] `(nilable ~(describe* spec))))))
+      (describe* [_] `(nilable ~(s/mres form))))))
 
 (defn exercise
   "generates a number (default 10) of values compatible with spec and maps conform over them,

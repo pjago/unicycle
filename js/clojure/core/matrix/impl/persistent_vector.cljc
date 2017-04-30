@@ -6,7 +6,8 @@
    - If the array is 1-dimensional each element is a scalar
    - Otherwise each element is an sub-array with identical shape (1 dimensional or more)
 
-   Note that this allows for other array implementations to be nested inside persistent vectors."
+   Note that this allows for other array implementations to be nested inside persistent vectors,
+   provided all nested arrays have the same shape and dimensionality of at least 1."
   (:require [clojure.core.matrix.protocols :as mp]
             [clojure.core.matrix.implementations :as imp]
             [clojure.core.matrix.impl.common :refer [mapmatrix]]
@@ -268,6 +269,16 @@
              (vec (concat (subvec m sh c) (subvec m 0 sh)))))
          (mapv (fn [s] (mp/rotate s (dec dim) places)) m)))))
 
+(extend-protocol mp/PTransposeDims
+  #?(:clj IPersistentVector :cljs PersistentVector)
+    (transpose-dims [m ordering]
+      (if-let [ordering (seq ordering)]
+        (let [dim (long (first ordering))
+              next-ordering (map (fn [i] (if (< i dim) i (dec i))) (next ordering))
+              slice-range (range (mp/dimension-count m dim))]
+          (mapv (fn [si] (mp/transpose-dims (mp/get-slice m dim si) next-ordering)) slice-range))
+        m)))
+
 (extend-protocol mp/POrder
   #?(:clj IPersistentVector :cljs PersistentVector)
   (order
@@ -326,19 +337,23 @@
 
           :else (mp/inner-product a b))))
     (length [a]
-      (let [n (long (count a))]
-        (loop [i 0 res 0.0]
-          (if (< i n)
-            (let [x (double (nth a i))]
-              (recur (inc i) (+ res (* x x))))
-            (Math/sqrt res)))))
+      (if (number? (first a))
+        (let [n (long (count a))]
+         (loop [i 0 res 0.0]
+           (if (< i n)
+             (let [x (double (nth a i))]
+               (recur (inc i) (+ res (* x x))))
+             (Math/sqrt res))))
+        (Math/sqrt (mp/length-squared a))))
     (length-squared [a]
-      (let [n (long (count a))]
-        (loop [i 0 res 0.0]
-          (if (< i n)
-            (let [x (double (nth a i))]
-              (recur (inc i) (+ res (* x x))))
-            res))))
+      (if (number? (first a)) 
+        (let [n (long (count a))]
+          (loop [i 0 res 0.0]
+            (if (< i n)
+              (let [x (double (nth a i))]
+                (recur (inc i) (+ res (* x x))))
+              res)))
+        (mp/element-reduce a (fn [^double r ^double x] (+ r (* x x))) 0.0)))
     (normalise [a]
       (mp/scale a (/ 1.0 (Math/sqrt (mp/length-squared a))))))
 
@@ -370,23 +385,23 @@
 (extend-protocol mp/PMatrixEquality
   #?(:clj IPersistentVector :cljs PersistentVector)
     (matrix-equals [a b]
-      (let [bdims (long (mp/dimensionality b))]
+      (let [bdims (long (mp/dimensionality b))
+            acount (long (count a))]
         (cond
           (<= bdims 0)
             false
-          (not= (count a) (mp/dimension-count b 0))
+          (not= acount (mp/dimension-count b 0))
             false
           (== 1 bdims)
             (and (== 1 (long (mp/dimensionality a)))
-                 (let [n (long (count a))]
-                   (loop [i 0]
-                     (if (< i n)
-                       (if (== (mp/get-1d a i) (mp/get-1d b i)) ;; can't avoid boxed warning, may be any sort of number
-                         (recur (inc i))
-                         false)
-                       true))))
+                 (loop [i 0]
+                   (if (< i acount)
+                     (if (== (mp/get-1d a i) (mp/get-1d b i)) ;; can't avoid boxed warning, may be any sort of number
+                       (recur (inc i))
+                       false)
+                     true)))
           (vector? b)
-            (let [n (long (count a))]
+            (let [n acount]
                (loop [i 0]
                      (if (< i n)
                        (if (mp/matrix-equals (a i) (b i))
@@ -394,7 +409,8 @@
                          false)
                        true)))
           :else
-            (loop [sa (seq a) sb (mp/get-major-slice-seq b)]
+            (loop [sa (seq a) 
+                   sb (mp/get-major-slice-seq b)]
               (if sa
                 (if (mp/matrix-equals (first sa) (first sb))
                   (recur (next sa) (next sb))
@@ -436,6 +452,8 @@
         (cond
           (== 0 adims)
             (mp/scale m (mp/get-0d a))
+          (not (== (long (last (mp/get-shape m))) (long (first (mp/get-shape a)))))
+            (error "Incompatible shapes for inner product: " (mp/get-shape m) " and " (mp/get-shape a))
           (== 1 mdims)
             (if (== 1 adims)
               (mp/element-sum (mp/element-multiply m a))
@@ -546,31 +564,29 @@
             m
             (error "Can't convert to persistent vector array: inconsistent shape."))))))
 
-(defn- copy-to-double-array [m ^doubles arr ^long off ^long size]
-  (let [ct (count m)]
+(defn- copy-to-double-array! 
+  "Copy an arbitrary array to a region of a double array.
+   Assumes size represents the element count of the array, must be greater than zero."
+  ([m ^doubles arr ^long off ^long size]
     (cond
-      ;; we need this to handle the case of non-vectors nested in vectors
-      (not (vector? m))
-        (doseq-indexed [v (mp/element-seq m) i]
-          (aset arr (+ off i) (double v)))
-      ;; m must be a vector from now on
-      (and (== size ct) (not (vector?
-                               #?(:clj
-                                   (.nth ^IPersistentVector m 0 nil)
-                                  :cljs
-                                   (nth ^PersistentVector m 0 nil)))))
-        (dotimes [i size]
-          (aset arr (+ off i) (double (nth ^#?(:clj IPersistentVector :cljs PersistentVector) m i))))
+      ;; handle a single numerical value
+      (number? m) (aset arr off (double m))
+      ;; handle a Clojure vector. Could have nested arrays
+      (vector? m)
+        (let [ct (count m)]
+          (let [skip (quot size ct)]
+            (dotimes [i ct]
+              (copy-to-double-array!
+                #?(:clj
+                    (.nth ^IPersistentVector m i)
+                    :cljs
+                    (nth ^PersistentVector m i))
+                 arr (+ off (* i skip)) skip))))
+      ;; otherwise, must be some arbitrary core.matrix array
+      ;; TODO think of a faster way to implement this.
       :else
-        (let [skip (quot size ct)]
-          (dotimes [i ct]
-            (copy-to-double-array
-              #?(:clj
-                  (.nth ^IPersistentVector m i)
-                  :cljs
-                  (nth ^PersistentVector m i))
-               arr (+ off (* i skip)) skip))))
-    arr))
+        (doseq-indexed [v (mp/element-seq m) i]
+          (aset arr (+ off i) (double v))))))
 
 (extend-protocol mp/PDoubleArrayOutput
   #?(:clj IPersistentVector :cljs PersistentVector)
@@ -578,7 +594,8 @@
       (let [size (long (mp/element-count m))
             arr (double-array size)
             ct (count m)]
-        (copy-to-double-array m arr 0 size)
+        (when (> size 0)
+          (copy-to-double-array! m arr 0 size))
         arr))
     (as-double-array [m] nil))
 

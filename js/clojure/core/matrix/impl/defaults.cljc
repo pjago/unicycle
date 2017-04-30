@@ -1,4 +1,14 @@
 (ns clojure.core.matrix.impl.defaults
+  "Default implementations for core.matrix protocols
+
+   These should be correct reference implementations for all protocols that work on
+   arbitrary objects. They are not necessarily tuned for performance.
+
+   Default implementations are defined for:
+    - nil (treated as a scalar nil value)
+    - Numbers (treated as scalar numerical values)
+    - Arbitrary arrays for which the protocol is not otherwise defined
+  "
   (:require [clojure.core.matrix.protocols :as mp]
             [clojure.core.matrix.impl.wrappers :as wrap]
             [clojure.core.matrix.impl.mathsops :as mops :refer [to-degrees* to-radians*]]
@@ -42,9 +52,9 @@
 (defn- calc-element-count
   "Returns the total count of elements in an array"
   ([m]
-    (cond
-      (array? m) (reduce * 1 (mp/get-shape m))
-      :else (count m))))
+    (if-let [sh (mp/get-shape m)]
+      (reduce * sh)
+      1)))
 
 ;; TODO: make smarter for different numeric types
 ;; TODO: have this return ndarrays once we have cljs support
@@ -90,7 +100,9 @@
     (supports-dimensionality? [m dimensions]
       true)
 
-  ;; keyword implementation looks up implementation by keyword
+  ;; keyword implementation looks up the underlying implementation by keyword
+  ;; this is intended to allow keywords to be used for dispatch rather than concrete
+  ;; instances from the underlying implementation, e.g. (coerce :vectorz some-other-array)
   #?(:clj clojure.lang.Keyword
      :cljs cljs.core.Keyword)
     (implementation-key [m] m)
@@ -322,8 +334,8 @@
 (extend-protocol mp/PVectorOps
   #?(:clj Number :cljs number)
     (vector-dot [a b] (mp/pre-scale b a))
-    (length [a] (double a))
-    (length-squared [a] (Math/sqrt (double a)))
+    (length [a] (Math/abs (double a)))
+    (length-squared [a] (let [a (double a)] (* a a)))
     (normalise [a]
       (let [a (double a)]
         (cond
@@ -332,7 +344,9 @@
           :else 0.0)))
   #?(:clj Object :cljs object)
     (vector-dot [a b]
-      (mp/element-sum (mp/element-multiply a b)))
+      ;; compute dot product if we have two vectors, otherwise return nil
+      (when (and (== 1 (long (mp/dimensionality a))) (== 1 (long (mp/dimensionality b))))
+        (mp/element-sum (mp/element-multiply a b))))
     (length [a]
       (Math/sqrt (double (mp/length-squared a))))
     (length-squared [a]
@@ -683,18 +697,21 @@
     (transpose [m]
       (mp/coerce-param
        m
-       (case (long (mp/dimensionality m))
-         0 m
-         1 m
-         2 (apply mapv vector (mapv
-                               #(mp/convert-to-nested-vectors %)
-                               (mp/get-major-slice-seq m)))
-         (let [ss (mapv mp/transpose (mp/get-major-slice-seq m))]
-           ;; note that function must come second for mp/element-map
-           (case (count ss)
-             1 (mp/element-map (mp/convert-to-nested-vectors (first ss)) vector)
-             2 (mp/element-map (mp/convert-to-nested-vectors (first ss)) vector (second ss))
-             (mp/element-map (mp/convert-to-nested-vectors (first ss)) vector (second ss) (nnext ss))))))))
+       (let [dims (long (mp/dimensionality m))]
+         (case dims
+           0 m
+           1 m
+           2 (apply mapv vector (mp/convert-to-nested-vectors m))
+           (mp/transpose-dims m (reverse (range dims))))))))
+
+(extend-protocol mp/PTransposeDims
+  nil
+    (transpose-dims [m ordering] m)
+  #?(:clj Number :cljs number)
+    (transpose-dims [m ordering] m)
+  #?(:clj Object :cljs object)
+    (transpose-dims [m ordering]
+      (mp/transpose-dims (mp/convert-to-nested-vectors m) ordering)))
 
 (extend-protocol mp/PTransposeInPlace
   #?(:clj Object :cljs object)
@@ -805,8 +822,8 @@
 
 (extend-protocol mp/PIndexRank
   #?(:clj Object :cljs object)
-    (index-rank 
-      ([m] 
+    (index-rank
+      ([m]
         (let [dims (long (mp/dimensionality m))]
           (case dims
             0 (error "Can't get indexed rank of a scalar value")
@@ -852,7 +869,7 @@
         (mp/is-scalar? m)
           (mp/pre-scale a m)
         :else
-        (mp/element-map m (fn [v] (mp/pre-scale a v)))
+        (mp/element-map (mp/convert-to-nested-vectors m) (fn [x] (mp/pre-scale a x)))
         ;; convert to nested vectors first, this enables trick of extending dimensionality for each element with element-map
         ;(mp/element-map (mp/convert-to-nested-vectors m) (fn [v] (mp/pre-scale a v)))
         )))
@@ -1401,14 +1418,22 @@
     ([m f]
       (construct-matrix m (mapv f (mp/get-major-slice-seq m))))
     ([m f a]
-      (construct-matrix m (mapv f 
+      (construct-matrix m (mapv f
                                 (mp/get-major-slice-seq m)
                                 (mp/get-major-slice-seq a))))
     ([m f a more]
-      (construct-matrix m (apply mapv f 
+      (construct-matrix m (apply mapv f
                                  (mp/get-major-slice-seq m)
                                  (mp/get-major-slice-seq a)
                                  (map mp/get-major-slice-seq more))))))
+
+;; slice-map
+(extend-protocol mp/PFilterSlices
+  #?(:clj Object :cljs object)
+  (filter-slices [m f]
+    (let [slcs (filterv f (mp/get-major-slice-seq m))]
+      ;; check for no slices, in which case we must return nil
+      (if (seq slcs) slcs nil))))
 
 ;; functional operations
 (extend-protocol mp/PFunctionalOperations
@@ -1579,9 +1604,7 @@
   #?(:clj Number :cljs number) (element-count [m] 1)
   #?(:clj Object :cljs object)
     (element-count [m]
-      (if (array? m)
-        (calc-element-count m)
-        1)))
+      (calc-element-count m)))
 
 (extend-protocol mp/PValidateShape
   nil
@@ -1623,11 +1646,11 @@
   (gemm! [c trans-a? trans-b? alpha a b beta]
     (let [a (if trans-a? (mp/transpose a) a)
           b (if trans-b? (mp/transpose b) b)]
-      (mp/scale! c beta)
+      (if-not (== 1.0 (double beta)) (mp/scale! c beta))
       (mp/add-inner-product! c a b alpha)))
   (gemv! [c trans-a? alpha a b beta]
     (let [a (if trans-a? (mp/transpose a) a)]
-      (mp/scale! c beta)
+      (if-not (== 1.0 (double beta)) (mp/scale! c beta))
       (mp/add-inner-product! c a b alpha))))
 
 (extend-protocol mp/PMatrixColumns
@@ -1636,8 +1659,8 @@
     (case (long (mp/dimensionality m))
       0 (error "Can't get columns of a 0-dimensional object")
       1 (error "Can't get columns of a 1-dimensional object")
-      2 (mp/get-slice-seq m 1)
-      (mapcat mp/get-columns (mp/get-major-slice-seq m)))))
+      2 (vec (mp/get-slice-seq m 1))
+      (vec (mapcat mp/get-columns (mp/get-major-slice-seq m))))))
 
 (extend-protocol mp/PMatrixRows
   #?(:clj Object :cljs object)
@@ -1645,8 +1668,8 @@
     (case (long (mp/dimensionality m))
       0 (error "Can't get rows of a 0-dimensional object")
       1 (error "Can't get rows of a 1-dimensional object")
-      2 (mp/get-major-slice-seq m)
-      (mapcat mp/get-rows (mp/get-major-slice-seq m)))))
+      2 (vec (mp/get-major-slice-seq m))
+      (vec (mapcat mp/get-rows (mp/get-major-slice-seq m))))))
 
 (extend-protocol mp/PSliceView
   #?(:clj Object :cljs object)
@@ -1937,7 +1960,7 @@
   #?(:clj Object :cljs object)
     (coerce-param [m param]
       ;; NOTE: leave param unchanged if coercion not possible (probably an invalid shape for implementation)
-      (let [param (if (instance? ISeq param) (mp/convert-to-nested-vectors param) param)] ;; ISeqs can be slow, so convert to vectors
+      (let [param (if (instance? ISeq param) (mp/convert-to-nested-vectors param) param)] ;; ISeqs can be slow, so convert to vector first
         (or (mp/construct-matrix m param)
            param))))
 
@@ -2341,8 +2364,13 @@
   #?(:clj Object :cljs object)
   (norm [m p]
     (cond
-      (= p #?(:clj Double/POSITIVE_INFINITY :cljs js/Number.POSITIVE_INFINITY)) (mp/element-max m)
-      (number? p) (mp/element-sum (mp/element-pow (mp/element-map m mops/abs) p))
+      (= p #?(:clj Double/POSITIVE_INFINITY :cljs js/Number.POSITIVE_INFINITY)) (mp/element-max (mp/element-map m mops/abs))
+      (number? p) (let [sum-of-element-powers (mp/element-sum (mp/element-pow (mp/element-map m mops/abs) p))]
+                    (condp == p
+                      1 sum-of-element-powers
+                      2 (Math/sqrt sum-of-element-powers)
+                      3 (Math/cbrt sum-of-element-powers)
+                      (Math/pow sum-of-element-powers (/ 1.0 p))))
       :else (error "p must be a number"))))
 
 ;; QR decomposition utility functions

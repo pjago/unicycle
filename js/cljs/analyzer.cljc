@@ -147,7 +147,7 @@
    :infer-warning false})
 
 (def js-reserved
-  #{"arguments" "abstract" "boolean" "break" "byte" "case"
+  #{"arguments" "abstract" "await" "boolean" "break" "byte" "case"
     "catch" "char" "class" "const" "continue"
     "debugger" "default" "delete" "do" "double"
     "else" "enum" "export" "extends" "final"
@@ -691,8 +691,9 @@
   [module]
   ;; we need to check both keys and values of the JS module index, because
   ;; macroexpansion will be looking for the provided name - António Monteiro
-  (-> (into #{} (mapcat identity) (get-in @env/*compiler* [:js-module-index]))
-    (contains? module)))
+  (contains?
+    (into #{} (mapcat identity) (get-in @env/*compiler* [:js-module-index]))
+    (str module)))
 
 (defn confirm-var-exists
   ([env prefix suffix]
@@ -711,7 +712,7 @@
                 (not (loaded-js-ns? env prefix))
                 (not (and (= 'cljs.core prefix) (= 'unquote suffix)))
                 (nil? (gets @env/*compiler* ::namespaces prefix :defs suffix))
-                (not (js-module-exists? (str prefix))))
+                (not (js-module-exists? prefix)))
        (missing-fn env prefix suffix)))))
 
 (defn confirm-var-exists-throw []
@@ -746,7 +747,7 @@
              ;; macros may refer to namespaces never explicitly required
              ;; confirm that the library at least exists
              #?(:clj (nil? (util/ns->source ns-sym)))
-             (not (js-module-exists? (str ns-sym))))
+             (not (js-module-exists? ns-sym)))
     (warning :undeclared-ns env {:ns-sym ns-sym})))
 
 (defn core-name?
@@ -920,6 +921,13 @@
 
            (some? (gets @env/*compiler* ::namespaces (-> env :ns :name) :imports sym))
            (recur env (gets @env/*compiler* ::namespaces (-> env :ns :name) :imports sym) confirm)
+
+           (or (js-module-exists? s)
+               (js-module-exists? (resolve-ns-alias env s)))
+           (let [module (or (gets @env/*compiler* :js-module-index s)
+                            (resolve-ns-alias env s))]
+             {:name (symbol module)
+              :ns   'js})
 
            :else
            (let [cur-ns (-> env :ns :name)
@@ -1827,7 +1835,7 @@
         {:env env :op :set! :form form :target targetexpr :val valexpr
          :children [targetexpr valexpr]})))))
 
-(declare analyze-file)
+#?(:clj (declare analyze-file))
 
 #?(:clj
    (defn locate-src
@@ -2167,7 +2175,7 @@
     {:import  import-map
      :require import-map}))
 
-(declare parse-ns)
+#?(:clj (declare parse-ns))
 
 (defn macro-autoload-ns?
   "Given a spec form check whether the spec namespace requires a macro file
@@ -2941,6 +2949,12 @@
                :cljs ^boolean (.isMacro mvar)))
       mvar)))
 
+#?(:cljs
+   (let [cached-var (delay (get (ns-interns* 'cljs.spec) 'macroexpand-check))]
+     (defn get-macroexpand-check-var []
+       (when (some? (find-ns-obj 'cljs.spec))
+         @cached-var))))
+
 (defn macroexpand-1*
   [env form]
   (let [op (first form)]
@@ -2952,7 +2966,7 @@
                :cljs [do])
             (let [mchk  #?(:clj  (some-> (find-ns 'clojure.spec)
                                    (ns-resolve 'macroexpand-check))
-                           :cljs (get (ns-interns* 'cljs.spec) 'macroexpand-check))
+                           :cljs (get-macroexpand-check-var))
                   _     (when (some? mchk)
                           (mchk mac-var (next form)))
                   form' (try
