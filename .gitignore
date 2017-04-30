@@ -5,6 +5,7 @@ pom.xml.asc
 /classes/
 /target/
 /checkouts/
+/resources/
 /dev/
 *lein-deps-sum
 *lein-repl-history
