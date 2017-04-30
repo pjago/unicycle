@@ -1,6 +1,6 @@
 (ns common.math
   (:refer-clojure :exclude [+ - * / map])
-  (:require [clojure.spec :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.core.matrix :as m])
   (:use [clojure.core.matrix.operators :only [+ - * /] :rename {/ |}]))
 

@@ -1,7 +1,7 @@
 (ns unicycle.core
   (:refer-clojure :exclude [+ - * /])
-  (:require [clojure.spec :as s]
-            [common.math :refer [π τ π:2 π:4 dt] :as a]
+  (:require [clojure.spec.alpha :as s]
+            [common.math :refer [π τ dt] :as a]
             [clojure.core.matrix :as m])
   (:use [clojure.core.matrix.operators :only [+ - * /]]))
 
@@ -16,7 +16,7 @@
 (defmethod wheels :car [_] (s/tuple #{:car} ::+ number?))
 
 (s/def ::pos (s/cat :x number? :y number? :z #{1 1.0}))
-(s/def ::yaw number?) ;todo: conform into a-frame components
+(s/def ::yaw number?)
 (s/def ::geom (s/cat :type ident? :size any? :angle (s/? any?)))
 (s/def ::wheels (s/and (s/multi-spec wheels (fn [v _] v)) ::geom))
 (s/def ::engine (s/tuple ::+ ::+))
@@ -47,10 +47,10 @@
 (defn dff->uni [[b d]]
   (/ [[0.25 0.25] (/ [0.5 -0.5] b)] a/rad:s->rpm (/ d)))
 
-;PLAN ;only closed loop, unpredictable path. todo: add map
+;PLAN ;unpredictable path. todo: add map
 (defn uni-plan [{:keys [kρ kϕ ϵ]} [cmd ρ ϕ]]
   (let [D (if (<= ρ ϵ) 0 1)
-        S (- 1 (/ (Math/abs ϕ) π:2))
+        S (- 1 (/ (Math/abs ϕ) π 2))
         F (if-not (zero? ϕ) (m/signum ϕ) -1)
         υ (case cmd
             (:goto :avoid) (* kρ ρ)

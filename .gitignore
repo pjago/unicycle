@@ -6,9 +6,9 @@ pom.xml.asc
 /target/
 /checkouts/
 /dev/
-.lein-deps-sum
-.lein-repl-history
-.lein-plugins/
-.lein-failures
-.nrepl-port
-.log
+*lein-deps-sum
+*lein-repl-history
+*lein-plugins/
+*lein-failures
+*nrepl-port
+*log

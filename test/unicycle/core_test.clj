@@ -1,7 +1,7 @@
 (ns unicycle.core-test
   (:refer-clojure :exclude [+ - * /])
-  (:require [clojure.spec :as s]
-            [clojure.spec.test :as test]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.spec.test.alpha :as test]
             [clojure.core.matrix :as m]
             [common.math :as a]
             [unicycle.core :as u]
