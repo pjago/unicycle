@@ -1,6 +1,6 @@
 (ns unicycle.core
   (:refer-clojure :exclude [+ - * /])
-  (:require [clojure.spec :as s]
+  (:require [clojure.spec.alpha :as s]
             [common.math :refer [π τ dt] :as a]
             [clojure.core.matrix :as m])
   (:use [clojure.core.matrix.operators :only [+ - * /]]))

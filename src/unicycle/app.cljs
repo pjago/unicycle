@@ -1,6 +1,5 @@
 (ns unicycle.app
   (:refer-clojure :exclude [+ - * /])
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [goog.dom :as gdom]
             [om.next :as om :refer-macros [defui]]
             [om.dom :as dom]
@@ -8,8 +7,7 @@
             [common.web :as web]
             [unicycle.core :as u]
             [unicycle.parser :as parser]
-            [cljs.core.async :as async]
-            [clojure.spec :as s]
+            [clojure.spec.alpha :as s]
             [taoensso.sente :as sente :refer (cb-success?)])
   (:use [clojure.core.matrix.operators :only [+ - * /]]))
 

@@ -1,24 +1,27 @@
 (ns unicycle.server
   (:refer-clojure :exclude [+ - * /])
   (:require [common.math :refer [π τ dt] :as a]
+            [common.web :as web]
             [unicycle.core :as u]
-            [clojure.core.async :as async :refer [>! >!! <! <!! close! go thread]]
+            [clojure.core.async :as async :refer [>!! <!! close! thread]]
             [org.httpkit.server :as server]
             [compojure.core :refer [defroutes GET POST]]
-            [compojure.handler :as h]
             [compojure.route :as route]
             [taoensso.sente :as sente]
             [taoensso.sente.server-adapters.http-kit :as http-kit]
             [ring.middleware.defaults :as defaults]
             [ring.middleware.reload :as reload]
             [ring.middleware.cors :as cors]
-            [ring.util.response :as response])
-  (:use [clojure.core.matrix.operators :only [+ - * /]]))
+            [ring.util.response :as response]
+            [figwheel-sidecar.repl-api :as ra]
+            [clojure.data.json :as json])
+  (:use [clojure.core.matrix.operators :only [+ - * /]])
+  (:gen-class))
 
 (def base-cycle
   {:id nil
    :position [0.0 0.0 1.0] :yaw 0.0
-   :kρ 1.0 :kϕ 1.0 :ϵ 10
+   :kρ 0.5 :kϕ 1.0 :ϵ 10
    :wheels [:uni 0.2] :engine (* a/π [1.0 10.0])})
 
 (def init-data
@@ -28,7 +31,7 @@
   (ref init-data))
 
 (defn next-uid [{{uid :client-id} :params}]
-  (str (gensym))) ;não funciona com o figwheel
+  (str (gensym)))
 
 (declare channel-socket)
 
@@ -37,7 +40,27 @@
     (sente/make-channel-socket! (http-kit/get-sch-adapter)
       {:user-id-fn #'next-uid})))
 
+;matlab
+(defonce channels (atom #{}))
+
+(defn connect! [channel]
+  (println "matlab channel open")
+  (swap! channels conj channel))
+
+(defn disconnect! [channel status]
+  (println "matlab channel close")
+  (swap! channels #(remove #{channel} %)))
+
+(defn matlab-handler [request]
+  (server/with-channel request channel
+                       (connect! channel)
+                       (server/on-close channel #(disconnect! channel %))))
+
+;routes
 (defroutes routes
+  (GET "/ws" req (response/content-type
+                   (matlab-handler req)
+                   "application/json"))
   (GET "/" req (response/content-type
                  (response/resource-response "public/index.html")
                  "text/html"))
@@ -47,7 +70,7 @@
   (route/resources "/")
   (route/not-found "Not found"))
 
-(def handler ;no encription (todo: look at cors)
+(def handler
   (-> #'routes
       reload/wrap-reload
       (defaults/wrap-defaults
@@ -89,14 +112,16 @@
 
 (defn broadcast []
   (doseq [uid (:any @(:connected-uids channel-socket))]
-    ((:send-fn channel-socket) uid [:cycle/update (:cycles/by-id @world)])))
+    ((:send-fn channel-socket) uid [:cycle/update (:cycles/by-id @world)]))
+  (doseq [channel @channels]
+    (server/send! channel [(json/write-str (:cycles/by-id @world))])))
 
 ;server
 (defn start-game []
   (defonce game-thread
     (thread
       (loop [k 0]
-        (<!! (async/timeout 16.666))
+        (<!! (async/timeout 10))
         (let [data @world
               ids (keys (:cycles/by-id data))]
           (doseq [i ids :let [auto (get-in data [:cycles/by-id i])]]
@@ -115,4 +140,10 @@
   (start-game)
   (server/run-server #'handler
     {:port (or (some-> (first args) (Integer/parseInt))
-               3450)}))
+               3000)}))
+
+(defn start [] (ra/start-figwheel!))
+
+(defn stop [] (ra/stop-figwheel!))
+
+(defn cljs [] (ra/cljs-repl))

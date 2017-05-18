@@ -23,3 +23,8 @@ git add -A
 git commit "please help"
 
 find a better way to do it.
+
+To run the server:
+
+sudo /etc/init.d/apache2 restart
+java -jar unicycle-0.0.0-standalone.jar 3000
