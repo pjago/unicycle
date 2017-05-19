@@ -67,8 +67,11 @@
 
 (defmethod a-cycle :uni [{:keys [id yaw position] [_ size] :wheels}]
   (web/a-entity {:key id :position position :rotation [0 0 (* a/rad->deg yaw)]}
-    (chassis size (/ size 3))
-    (wheel (/ size 1.8) 0 [0 0 0])))
+    (web/a-entity {:text {:value id :zOffset 1 :align "center" :color 'black :height 2.0 :width 2.0}
+				   :rotation [180 0 180]})
+	(web/a-entity {:position [0 0 -0.5] :rotation [90 0 0] :geometry {:primitive 'box :width 0.01 :height 1 :depth 0.01}})
+	(chassis size (/ size 3))))
+    ;(wheel (/ size 1.8) 0 [0 0 0])))
 
 (defmethod a-cycle :dff [{:keys [id yaw position] [_ [base diameter]] :wheels}]
   (web/a-entity {:key id :position position :rotation [0 0 (* a/rad->deg yaw)]}
@@ -119,9 +122,10 @@
                    :onWheel #(om/transact! this (yaw-set %))
                    :onMouseMove #(do (om/transact! this (mouse-model %))
                                      (om/transact! this (position-set %)))}
-        (toggle this state)
+        ;(toggle this state)
         (apply web/a-scene {:id "scene"
-                            :key :scene}
+                            :key :scene
+							:inspector "url: https://aframe.io/releases/0.3.0/aframe-inspector.min.js"}
           (web/a-entity {:id "camera"
                          :key :camera
                          :position [0 0 -5]

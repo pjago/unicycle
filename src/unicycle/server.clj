@@ -21,7 +21,7 @@
 (def base-cycle
   {:id nil
    :position [0.0 0.0 1.0] :yaw 0.0
-   :kρ 0.5 :kϕ 1.0 :ϵ 10
+   :kp 0.5 :ko 1.0 :E 10
    :wheels [:uni 0.2] :engine (* a/π [1.0 10.0])})
 
 (def init-data

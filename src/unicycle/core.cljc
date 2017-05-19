@@ -5,9 +5,9 @@
             [clojure.core.matrix :as m])
   (:use [clojure.core.matrix.operators :only [+ - * /]]))
 
-(s/def ::kρ ::a/R+)
-(s/def ::kϕ ::a/R+)
-(s/def ::ϵ ::a/R+)
+(s/def ::kp ::a/R+)
+(s/def ::ko ::a/R+)
+(s/def ::E ::a/R+)
 
 (defmulti wheels first)
 (defmethod wheels :uni [_] (s/tuple #{:uni} #{0.0}))
@@ -19,7 +19,7 @@
 (s/def ::geometry (s/cat :type ident? :size any? :angle (s/? any?)))
 (s/def ::wheels (s/and (s/multi-spec wheels (fn [v _] v)) ::geometry))
 (s/def ::engine (s/tuple ::a/R+ ::a/R+))
-(s/def ::params (s/keys :req-un [::kρ ::kϕ ::ϵ]))
+(s/def ::params (s/keys :req-un [::kp ::ko ::E]))
 (s/def ::body (s/keys :req-un [::position ::yaw]))
 (s/def ::cycle (s/keys :req-un [::wheels ::engine]))
 (s/def ::auto (s/merge ::body ::cycle ::params))
@@ -34,7 +34,7 @@
 (defn auto-scale [to auto]
   (-> (update-in auto [:wheels 1] * to)
       (update :position m/mmul (a/scale to))
-      (update :ϵ * to)))
+      (update :E * to)))
 
 (s/fdef auto-scale
   :args (s/cat :scaling ::a/R+ :to-scale ::auto)
@@ -47,17 +47,17 @@
   (/ [[0.25 0.25] (/ [0.5 -0.5] base)] a/rad:s->rpm (/ diameter)))
 
 ;PLAN ;unpredictable path. todo: add map
-(defn uni-plan [{:keys [kρ kϕ ϵ]} [cmd ρ ϕ]]
-  (let [D (if (<= ρ ϵ) 0.0 1.0)
+(defn uni-plan [{:keys [kp ko E]} [cmd ρ ϕ]]
+  (let [D (if (<= ρ E) 0.0 1.0)
         A (- 1 (/ (Math/abs ϕ) π 0.5))
         S (if-not (zero? ϕ) (m/signum ϕ) -1.0)
         υ (case cmd
-            (:goto :avoid) (* kρ ρ)
-            :circle (* kρ ϵ))
+            (:goto :avoid) (* kp ρ)
+            :circle (* kp E))
         ω (case cmd
-            :goto (* kϕ ϕ)
-            :avoid (* kϕ (- ϕ (* π S)))
-            :circle (- (* D (/ υ ρ) S) (* kϕ ϕ A)))]
+            :goto (* ko ϕ)
+            :avoid (* ko (- ϕ (* π S)))
+            :circle (- (* D (/ υ ρ) S) (* ko ϕ A)))]
     [υ ω D A S]))
 
 (s/fdef uni-plan
@@ -71,7 +71,7 @@
 
 (defmethod plan :uni [auto task] (subvec (uni-plan auto task) 0 2))
 
-(defmethod plan :dff [{:keys [kρ kϕ ϵ] :as it} task]
+(defmethod plan :dff [{:keys [kp ko E] :as it} task]
   (let [[υ* ω D* A _] (uni-plan it task)
         D (case (first task)
             :goto (if (neg? A) 0.0 1.0)

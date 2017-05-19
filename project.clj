@@ -24,7 +24,7 @@
                                   [proto-repl-sayid "0.1.3"]
                                   [com.cemerick/piggieback "0.2.1"]
                                   [criterium "0.4.4"]]}}
-  :figwheel {:server-port 9222}
+  :figwheel {:server-port 9001}
   :cljsbuild {:builds
               [{:id "dev"
                 :source-paths ["src"]
@@ -39,8 +39,7 @@
                            :pretty-print true
                            :verbose false}}]}
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]
-                 :timeout 120000}
-  :aot :all
+                 :timeout 500000}
   :main unicycle.server
   :source-paths ["src"]
   :test-paths ["test"])
