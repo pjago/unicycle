@@ -13,3 +13,7 @@ pom.xml.asc
 *lein-failures
 *nrepl-port
 *log
+.idea/
+unicycle.iml
+out/
+test/

@@ -31,6 +31,21 @@
     (dom/button #js{:onClick #(om/transact! this ['(app/toggle) :state])}
                 (case state :on "ON" :off "OFF"))))
 
+(defn identext [id]
+  (list (web/a-entity {:text {:value id
+                              :zOffset 0.5
+                              :align "center"
+                              :color 'black
+                              :height 2.0
+                              :width 2.0}
+                       :rotation [180 0 180]})
+        (web/a-entity {:position [0 0 -0.25]
+                       :rotation [90 0 0]
+                       :geometry {:primitive 'box
+                                  :width 0.01
+                                  :height 0.5
+                                  :depth 0.01}})))
+
 (defn chassis [size diameter]
   (web/a-entity {:position [0 0 (/ size 2)]
                  :rotation [-2.5 90 90]
@@ -66,11 +81,11 @@
 (def auto (om/factory Auto {:key-fn :id}))
 
 (defmethod a-cycle :uni [{:keys [id yaw position] [_ size] :wheels}]
-  (web/a-entity {:key id :position position :rotation [0 0 (* a/rad->deg yaw)]}
-    (web/a-entity {:text {:value id :zOffset 1 :align "center" :color 'black :height 2.0 :width 2.0}
-				   :rotation [180 0 180]})
-	(web/a-entity {:position [0 0 -0.5] :rotation [90 0 0] :geometry {:primitive 'box :width 0.01 :height 1 :depth 0.01}})
-	(chassis size (/ size 3))))
+  (apply web/a-entity {:key id
+                       :position position
+                       :rotation [0 0 (* a/rad->deg yaw)]}
+    (chassis size (/ size 3))
+    (identext id)))
     ;(wheel (/ size 1.8) 0 [0 0 0])))
 
 (defmethod a-cycle :dff [{:keys [id yaw position] [_ [base diameter]] :wheels}]
@@ -90,8 +105,8 @@
 (declare app-state)
 
 (defn mouse-model [e]
-  [`(mouse/model {:x ~e.clientX
-                  :y ~e.clientY
+  [`(mouse/model {:x   ~e.clientX
+                  :y   ~e.clientY
                   :ref ~(gdom/getElement "camera")})
     :mouse])
 
@@ -122,10 +137,9 @@
                    :onWheel #(om/transact! this (yaw-set %))
                    :onMouseMove #(do (om/transact! this (mouse-model %))
                                      (om/transact! this (position-set %)))}
-        ;(toggle this state)
+        (toggle this state)
         (apply web/a-scene {:id "scene"
-                            :key :scene
-							:inspector "url: https://aframe.io/releases/0.3.0/aframe-inspector.min.js"}
+                            :key :scene}
           (web/a-entity {:id "camera"
                          :key :camera
                          :position [0 0 -5]
@@ -178,7 +192,7 @@
   (sente/start-client-chsk-router! ch-chsk event-msg-handler))
 
 ;om.next
-(set! om/*raf* (fn [f] (f) (set! om/*raf* nil)))
+;(set! om/*raf* (fn [f] (f) (set! om/*raf* nil)))
 
 (defonce app-state
   (atom (om/tree->db App init-data true)))

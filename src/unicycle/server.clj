@@ -58,8 +58,7 @@
 
 ;routes
 (defroutes routes
-  (GET "/ws" req (response/content-type
-                   (matlab-handler req)
+  (GET "/ws" req (response/content-type (matlab-handler req)
                    "application/json"))
   (GET "/" req (response/content-type
                  (response/resource-response "public/index.html")
