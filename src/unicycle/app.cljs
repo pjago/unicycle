@@ -1,208 +1,182 @@
 (ns unicycle.app
-  (:refer-clojure :exclude [+ - * /])
-  (:require [goog.dom :as gdom]
-            [om.next :as om :refer-macros [defui]]
-            [om.dom :as dom]
-            [common.math :refer [π τ dt] :as a]
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+                   [om.next :refer [defui]])
+  (:require [unicycle.ui :as ui]
+            [unicycle.parser :as p]
+            [unicycle.socket :refer [event]]
             [common.web :as web]
-            [unicycle.core :as u]
-            [unicycle.parser :as parser]
-            [clojure.spec.alpha :as s]
-            [taoensso.sente :as sente :refer (cb-success?)])
-  (:use [clojure.core.matrix.operators :only [+ - * /]]))
+            [common.math :refer [π τ dt] :as a]
+            [goog.dom :as gdom]
+            [om.next :as om :refer [transact!] :rename {transact! !}]
+            [om.dom :as dom]
+            [cljs.core.async :as async :refer [take! put! <! >! alts!]]
+            [taoensso.sente :as sente]
+            [system.components.sente
+             :refer [new-channel-socket-client]
+             :rename {new-channel-socket-client new-socket}]
+            [com.stuartsierra.component :as component :refer [start stop]]))
 
 (enable-console-print!)
 
-(s/def ::state #{:on :off})
-
 ;data
 (def init-data
-  {:state :off
-   :cycles []
-   :selected []
-   :mouse [0.0 0.0 1.0]
+  {:state  :on                                              ;#{:on :off}
+   :cycles [{:id       "foo"
+             :wheels   [:uni 0.1]
+             :position [1 0 1]
+             :yaw      0}]
+   :mouse  [0.0 0.0 1.0]
    :target {:position [0.0 0.0 1.0]
-            :yaw 0.0
-            :size 0.2}})
+            :yaw      0
+            :size     0.2}})
 
-;common ui
-(defn toggle [this state]
-  (dom/div #js{:style #js{:position "relative" :float "right" :zIndex 1}}
-    (dom/button #js{:onClick #(om/transact! this ['(app/toggle) :state])}
-                (case state :on "ON" :off "OFF"))))
-
-(defn identext [id]
-  (list (web/a-entity {:text {:value id
-                              :zOffset 0.5
-                              :align "center"
-                              :color 'black
-                              :height 2.0
-                              :width 2.0}
-                       :rotation [180 0 180]})
-        (web/a-entity {:position [0 0 -0.25]
-                       :rotation [90 0 0]
-                       :geometry {:primitive 'box
-                                  :width 0.01
-                                  :height 0.5
-                                  :depth 0.01}})))
-
-(defn chassis [size diameter]
-  (web/a-entity {:position [0 0 (/ size 2)]
-                 :rotation [-2.5 90 90]
-                 :geometry {:primitive 'box
-                            :width size
-                            :height (+ (/ size 4) diameter)
-                            :depth size}}))
-
-(defn wheel [diameter yaw position]
-  (web/a-entity {:position (+ position [0 0 (/ diameter 2)])
-                 :rotation [(- (* a/rad->deg yaw)) 90 180]
-                 :material {:color 'black}
-                 :geometry {:primitive 'cylinder
-                            :radius (/ diameter 2)
-                            :height (/ diameter 3)
-                            :segmentsRadial 9
-                            :segmentsHeight 3}}))
-
-;auto ui
-(defmulti a-cycle (comp first :wheels))
-
-(defui Auto
-  static om/Ident
-  (ident [this props]
-    [:cycles/by-id (:id props)])
-  static om/IQuery
-  (query [this]
-    [:id :position :yaw :wheels :act :target])
-  Object
-  (render [this]
-    (a-cycle (om/props this))))
-
-(def auto (om/factory Auto {:key-fn :id}))
-
-(defmethod a-cycle :uni [{:keys [id yaw position] [_ size] :wheels}]
-  (apply web/a-entity {:key id
-                       :position position
-                       :rotation [0 0 (* a/rad->deg yaw)]}
-    (chassis size (/ size 3))
-    (identext id)))
-    ;(wheel (/ size 1.8) 0 [0 0 0])))
-
-(defmethod a-cycle :dff [{:keys [id yaw position] [_ [base diameter]] :wheels}]
-  (web/a-entity {:key id :position position :rotation [0 0 (* a/rad->deg yaw)]}
-    (chassis base diameter)
-    (wheel diameter 0 (* base [0  0.5 0]))
-    (wheel diameter 0 (* base [0 -0.5 0]))))
-
-(defmethod a-cycle :car [{:keys [id yaw position] [_ size w-yaw] :wheels}]
-  (web/a-entity {:key id :position position :rotation [0 0 (* a/rad->deg yaw)]}
-    (chassis size (/ size 3))
-    (wheel (/ size 3) w-yaw (* size [ 0.25  0.5 0]))
-    (wheel (/ size 3) 0     (* size [-0.25  0.0 0]))
-    (wheel (/ size 3) w-yaw (* size [ 0.25 -0.5 0]))))
-
-;App events
+;actions
 (declare app-state)
+
+(defn state-toggle [_]
+  [`(state/toggle)
+   :state])
 
 (defn mouse-model [e]
   [`(mouse/model {:x   ~e.clientX
                   :y   ~e.clientY
                   :ref ~(gdom/getElement "camera")})
-    :mouse])
+   :mouse])
+
+(defn select-mouse [_]
+  [`(select/mouse)
+   :select])
 
 (defn select-clear [_]
-  [`(select/clear) :selected])
-
-(defn mouse-select [_]
-  [`(mouse/select) :selected])
+  [`(select/clear)
+   :select])
 
 (defn position-set [_]
-  [`(position/set) :selected])
+  [`(position/set)
+   :select])
 
 (defn yaw-set [e]
-  [`(yaw/set {:delta ~(* -0.0002 e.deltaY)})
-   :selected])
+  [`(yaw/set {:delta ~(* π 0.0005 e.deltaY)})
+   :select])
 
-;App ui
+(defn uid-set
+  ([name] [`(uid/set {:value ~name})
+           :uid])
+  ([name e] (if (= e.key "Enter")
+              (uid-set name)
+              [])))
+
+;root
+(def background
+  #js{:width    "100%"
+      :height   "100vh"
+      :position "absolute"
+      :top      0
+      :left     0})
+
+(defui Login
+  static om/IQuery
+  (query [this]
+    [:client-id])
+  Object
+  (render [this]
+    (let [cid (-> this om/props :client-id)]
+      (dom/div #js{:style background}
+        (if (= cid ::p/not-found)
+          (dom/div #js{:style      #js{:display "inline-block" :zIndex 1}
+                       :onKeyPress #(! this (uid-set (or (om/get-state this :name) "") %))}
+            (dom/input #js{:ref      "name"
+                           :type     "text"
+                           :value    (or (om/get-state this :name) "choose name")
+                           :onClick  #(om/update-state! this assoc :name "")
+                           :onChange #(om/update-state! this assoc :name (.. % -target -value))})
+            (dom/button #js{:onClick #(! this (uid-set (or (om/get-state this :name) "")))}
+              "SEND"))
+          (str cid))))))
+
 (defui App
   static om/IQuery
   (query [this]
-    [:state :mouse :target {:cycles (om/get-query Auto)}])
+    [:uid :state :target {:cycles (om/get-query ui/Auto)}])
   Object
   (render [this]
-    (let [{:keys [state mouse target cycles]} (om/props this)]
-      (dom/div #js{:style #js{:height "100vh" :width "100vh"}
-                   :onMouseDown #(om/transact! this (mouse-select %))
-                   :onMouseUp #(om/transact! this (select-clear %))
-                   :onWheel #(om/transact! this (yaw-set %))
-                   :onMouseMove #(do (om/transact! this (mouse-model %))
-                                     (om/transact! this (position-set %)))}
-        (toggle this state)
-        (apply web/a-scene {:id "scene"
-                            :key :scene}
-          (web/a-entity {:id "camera"
-                         :key :camera
-                         :position [0 0 -5]
-                         :rotation [180 0 180]
-                         :camera {:active true :zoom 2}
-                         :wasd-controls "adInverted: true; wsInverted: true"})
-          (web/a-entity {:id "target"
-                         :key :target
-                         :position (:position target)
-                         :rotation [180 0 180]
-                         :material {:opacity 0.3}
-                         :geometry {:primitive 'circle
-                                    :radius (:size target)}})
-          (map auto cycles))))))
-
-;sente
-(defn merge-novelty [state by-id] ;todo: it more efficiently
-  (-> state
-      (assoc :cycles (mapv vector (repeat :cycles/by-id) (keys by-id)))
-      (assoc :cycles/by-id by-id)))
-
-(defonce channel-socket
-  (sente/make-channel-socket! "/chsk" {:type :auto}))
-
-(defonce chsk (:chsk channel-socket))
-(defonce ch-chsk (:ch-recv channel-socket))
-(defonce chsk-send! (:send-fn channel-socket))
-(defonce chsk-state (:state channel-socket))
-
-(defmulti event-msg-handler :id)
-
-(defmethod event-msg-handler :default [{:keys [event]}]
-  (println "Unhandled event: %s" event))
-
-(defmethod event-msg-handler :chsk/state [{:keys [?data]}]
-  (if (:ever-opened? (last ?data))
-    (println "Channel socket successfully established!")
-    (println "Channel socket problem!" \newline ?data)))
-
-(defmethod event-msg-handler :chsk/handshake [{:keys [uid ?data]}]
-  (println "Handshake:" ?data)
-  (swap! app-state assoc :id uid)
-  (chsk-send! [:cycle/name :marco]))
-
-(defmethod event-msg-handler :chsk/recv [{:keys [?data]}]
-  (swap! app-state merge-novelty (last ?data))
-  (chsk-send! [:cycle/target (:target @app-state)]))
-
-(defonce router
-  (sente/start-client-chsk-router! ch-chsk event-msg-handler))
+    (let [{:keys [uid state target cycles]} (om/props this)]
+      (dom/div #js{:style       background
+                   :onMouseDown #(! this (select-mouse %))
+                   :onMouseUp   #(! this (select-clear %))
+                   :onWheel     #(! this (yaw-set %))
+                   :onMouseMove #(do (! this (mouse-model %))
+                                     (! this (position-set %)))}
+        (str uid)
+        #_(toggle state)
+        (dom/button #js{:onClick #(! this (state-toggle %))
+                        :style   #js{:position "relative"
+                                     :float    "right"}}
+          (case state :on "ON"
+                      :off "OFF"))
+        #_(vr scene)
+        (dom/div #js{:style (js/Object.assign #js{:zIndex -1} background)}
+          (apply web/a-scene {:id  "scene"
+                              :key :scene}
+            (web/a-entity {:id            "camera"
+                           :key           :camera
+                           :position      [0 0 -5]
+                           :rotation      [180 0 180]
+                           :camera        {:active true :zoom 2}
+                           :wasd-controls {:adInverted true :wsInverted true}})
+            (web/a-entity {:key      "target"
+                           :position (:position target)
+                           :rotation [180 0 180]
+                           :material {:opacity 0.3}
+                           :geometry {:primitive 'circle
+                                      :radius    (:size target)}})
+            (map ui/auto cycles)))))))
 
 ;om.next
-;(set! om/*raf* (fn [f] (f) (set! om/*raf* nil)))
+(defonce login (async/promise-chan))
+(defonce app-state (atom (om/tree->db App init-data true)))
+(def parser (om/parser {:read p/read :mutate p/mutate}))
 
-(defonce app-state
-  (atom (om/tree->db App init-data true)))
-
-(def parser (om/parser {:read parser/read :mutate parser/mutate}))
-
-(defonce reconciler
-  (om/reconciler
-    {:logger nil
-     :state app-state
-     :parser parser}))
-
-(om/add-root! reconciler App (gdom/getElement "app"))
+(defn -main [& args]
+  (let [app    (gdom/getElement "app")
+        config {:logger  nil
+                :state   app-state
+                :parser  parser
+                :remotes [:remote]}
+        newr   #(om/reconciler (assoc config :send %))
+        raux   (newr (fn [{?query :remote} cb]
+                       (if-let [cid (-> ?query first last :value)]
+                         (go (let [socket     (start (new-socket nil "/chsk" {:client-id cid}))
+                                   ch-chsk    (:ch-chsk socket)
+                                   chsk-send! (:chsk-send! socket)]
+                               (event (<! ch-chsk))         ;chsk/state
+                               (event (<! ch-chsk))         ;chsk/handshake
+                               (chsk-send! [:query/remote ?query])
+                               (cb (event (<! ch-chsk)))
+                               (def sente socket)
+                               (>! login socket))))))]
+    ;before login
+    (om/add-root! raux Login app)
+    (def reconciler raux)
+    ;after login
+    (go (let [socket     (<! login)
+              ch-chsk    (:ch-chsk socket)
+              chsk-send! (:chsk-send! socket)
+              ractual    (newr (fn [{q? :remote} cb]
+                                 (chsk-send! [:query/remote
+                                              (vec (concat
+                                                     (->> (filter list? q?)
+                                                          (group-by first)
+                                                          vals
+                                                          (map last))
+                                                     (distinct (remove list? q?))))])
+                                 (take! ch-chsk (comp cb
+                                                      #(om/tree->db App % true)
+                                                      event))))]
+          (om/remove-root! raux app)
+          (om/add-root! ractual App app)
+          (set! om/*raf*
+                (fn [f]
+                  (f)
+                  (! ractual ['(refresh/remote) :cycles])))
+          (def reconciler ractual)))))
