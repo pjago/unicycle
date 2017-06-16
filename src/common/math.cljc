@@ -10,16 +10,43 @@
 (def ^:const π:2 (| π 2))
 (def ^:const π:4 (| π 4))
 (def ^:const π:6 (| π 6))
+(def ^:const +inf #?(:clj Double/POSITIVE_INFINITY :cljs js/Infinity))
+(def ^:const -inf (- +inf))
+
+(defn dist [xseq yseq]
+  (Math/sqrt
+    (loop [acc 0 xs xseq ys yseq]
+      (if-let [x (first xs)]
+        (if-let [y (first ys)]
+          (recur (+ acc (Math/abs (- x y)))
+                 (drop 1 xs)
+                 (drop 1 ys))
+          acc)
+        acc))))
 
 (defn /
   ([x] x)
   ([x y] (| (* x y) (+ x y)))
   ([x y & more] (reduce / (/ x y) more)))
 
-;SIMULATION
-(def ^:const dt (| 60))
+;TRANSDUCERS
+(defn monotone [tone]
+  (let [pitch (volatile! (tone))]
+    (filter #(when-let [tonic (tone % @pitch)]
+               (vreset! pitch tonic)
+               true))))
+
+(defn closest [keyfn to]
+  (monotone
+    (fn ([] +inf)
+        ([v y] (-> (keyfn v)
+                   (dist to)
+                   (as-> x (if (<= x y)
+                             x)))))))
 
 ;UNITS
+(def ^:const fps 60)
+(def ^:const dt (| fps))
 (def ^:const rad:s->rpm (| 60 τ))
 (def ^:const m:s->km:h 3.6)
 (def ^:const rad->deg (| 180 π))

@@ -1,38 +1,27 @@
 (ns unicycle.app
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+  (:require-macros [cljs.core.async.macros :refer [go]]
                    [om.next :refer [defui]])
   (:require [unicycle.ui :as ui]
             [unicycle.parser :as p]
             [unicycle.socket :refer [event]]
             [common.web :as web]
-            [common.math :refer [π τ dt] :as a]
             [goog.dom :as gdom]
             [om.next :as om :refer [transact!] :rename {transact! !}]
             [om.dom :as dom]
-            [cljs.core.async :as async :refer [take! put! <! >! alts!]]
-            [taoensso.sente :as sente]
-            [system.components.sente
-             :refer [new-channel-socket-client]
-             :rename {new-channel-socket-client new-socket}]
-            [com.stuartsierra.component :as component :refer [start stop]]))
-
-(enable-console-print!)
+            [cljs.core.async :as async :refer [take! <! >!]]
+            [taoensso.sente :as sente :refer [make-channel-socket-client!]]))
 
 ;data
-(def init-data
+(defonce init-data
   {:state  :on                                              ;#{:on :off}
-   :cycles [{:id       "foo"
-             :wheels   [:uni 0.1]
-             :position [1 0 1]
-             :yaw      0}]
    :mouse  [0.0 0.0 1.0]
-   :target {:position [0.0 0.0 1.0]
-            :yaw      0
-            :size     0.2}})
+   :select [:entity/menu "_menu"]})
+;   :entities [[:entity/cycle (om/tempid)]
+;              [:entity/target "target"]]})
 
-;actions
 (declare app-state)
 
+;actions
 (defn state-toggle [_]
   [`(state/toggle)
    :state])
@@ -43,21 +32,19 @@
                   :ref ~(gdom/getElement "camera")})
    :mouse])
 
-(defn select-mouse [_]
+(defn select-mouse []
   [`(select/mouse)
    :select])
 
-(defn select-clear [_]
-  [`(select/clear)
+(defn select-menu []
+  [`(select/menu)
    :select])
 
-(defn position-set [_]
-  [`(position/set)
-   :select])
+(defn position-set [s]
+  [`(position/set {:select ~s})])
 
-(defn yaw-set [e]
-  [`(yaw/set {:delta ~(* π 0.0005 e.deltaY)})
-   :select])
+(defn yaw-set [s e]
+  [`(yaw/set {:select ~s :delta ~(* 0.0015708 e.deltaY)})])
 
 (defn uid-set
   ([name] [`(uid/set {:value ~name})
@@ -67,6 +54,8 @@
               [])))
 
 ;root
+(declare *reconciler*)
+
 (def background
   #js{:width    "100%"
       :height   "100vh"
@@ -94,26 +83,53 @@
               "SEND"))
           (str cid))))))
 
-(defui App
-  static om/IQuery
-  (query [this]
-    [:uid :state :target {:cycles (om/get-query ui/Auto)}])
+(defui MouseListener
   Object
   (render [this]
-    (let [{:keys [uid state target cycles]} (om/props this)]
-      (dom/div #js{:style       background
-                   :onMouseDown #(! this (select-mouse %))
-                   :onMouseUp   #(! this (select-clear %))
-                   :onWheel     #(! this (yaw-set %))
-                   :onMouseMove #(do (! this (mouse-model %))
-                                     (! this (position-set %)))}
-        (str uid)
+    (let [select (:select (om/props this))
+          tag    (last select)
+          basic  #js{:style       background
+                     :onMouseDown #(! *reconciler* (select-mouse))}]
+      (case tag
+        "_menu" (-> #js{:onMouseMove #(! *reconciler* (mouse-model %))}
+                    (js/Object.assign basic)
+                    (dom/div))
+        (-> #js{:onWheel     #(! *reconciler* (yaw-set select %))
+                :onMouseMove #(->> (position-set select)
+                                   (into (mouse-model %))
+                                   (! *reconciler*))
+                :onMouseUp   #(->> (select-menu)
+                                   (into `[(:entities ~{:only [tag]})])
+                                   (! *reconciler*))}
+            (js/Object.assign basic)
+            (dom/div))))))
+
+(def mouse-listener
+  (om/factory MouseListener))
+
+(defui Main
+  static om/IQuery
+  (query [this]
+    [:uid :client-id :state :select {:entities (om/get-query ui/Entity)}])
+  Object
+  (render [this]
+    (let [{:keys [uid client-id state select entities]} (om/props this)]
+      (dom/div #js{:style background}
+        #_(event listeners)
+        (mouse-listener {:select select})
+        #_(show uid)
+        (if-not (= uid ::p/not-found)
+          (str uid)
+          (str client-id))
+        #_(show select)
+        (dom/div #js{:style #js{:position "absolute"
+                                :bottom   0}}
+          (str select))
         #_(toggle state)
         (dom/button #js{:onClick #(! this (state-toggle %))
                         :style   #js{:position "relative"
                                      :float    "right"}}
-          (case state :on "ON"
-                      :off "OFF"))
+          (name state))
         #_(vr scene)
         (dom/div #js{:style (js/Object.assign #js{:zIndex -1} background)}
           (apply web/a-scene {:id  "scene"
@@ -124,59 +140,70 @@
                            :rotation      [180 0 180]
                            :camera        {:active true :zoom 2}
                            :wasd-controls {:adInverted true :wsInverted true}})
-            (web/a-entity {:key      "target"
-                           :position (:position target)
-                           :rotation [180 0 180]
-                           :material {:opacity 0.3}
-                           :geometry {:primitive 'circle
-                                      :radius    (:size target)}})
-            (map ui/auto cycles)))))))
+            (map ui/entity entities)))))))
 
 ;om.next
 (defonce login (async/promise-chan))
-(defonce app-state (atom (om/tree->db App init-data true)))
+(defonce app-state (atom (om/tree->db Main init-data true)))
+
+(defn merge-fn [reconciler state novelty _]
+  (if-let [entities (:entities novelty)]
+    (let [tagged (group-by last (:entities state))
+          idents (transduce (mapcat #(tagged (key %)))
+                            (completing #(assoc %1 %2 (entities (last %2))))
+                            {}
+                            entities)]
+      ;(om/default-merge reconciler state idents nil))
+      (om/default-merge reconciler state {:entities (vec (vals entities))} nil)) ;to remove
+    (om/default-merge reconciler state novelty nil)))
+
 (def parser (om/parser {:read p/read :mutate p/mutate}))
+(def config {:logger    nil ;todo: merge :entities correctly
+             :state     app-state
+             :merge     merge-fn
+             :parser    parser
+             :normalize true
+             :remotes   [:remote]})
+(def app (gdom/getElement "app"))
+
+(def ^:dynamic *reconciler*
+  (->> (fn [{?query :remote} cb]
+         (if-let [cid (-> ?query first last :value)]
+           (go (let [socket     (make-channel-socket-client! "/chsk" {:client-id cid})
+                     ch-chsk    (:ch-recv socket)
+                     chsk-send! (:send-fn socket)]
+                 (event (<! ch-chsk))                       ;chsk/state
+                 (event (<! ch-chsk))                       ;chsk/handshake
+                 (chsk-send! [::login ?query])
+                 (cb (event (<! ch-chsk)))
+                 (defonce sente socket)
+                 (>! login socket)))))
+       (assoc config :send)
+       (om/reconciler)))
+
+(om/add-root! *reconciler* Login app)
+
+(defn distinct-by [f]
+  (let [seen (volatile! (transient #{}))]
+    (filter (fn [x]
+              (let [y (f x)]
+                (when-not (@seen y)
+                  (vswap! seen conj! y)
+                  true))))))
 
 (defn -main [& args]
-  (let [app    (gdom/getElement "app")
-        config {:logger  nil
-                :state   app-state
-                :parser  parser
-                :remotes [:remote]}
-        newr   #(om/reconciler (assoc config :send %))
-        raux   (newr (fn [{?query :remote} cb]
-                       (if-let [cid (-> ?query first last :value)]
-                         (go (let [socket     (start (new-socket nil "/chsk" {:client-id cid}))
-                                   ch-chsk    (:ch-chsk socket)
-                                   chsk-send! (:chsk-send! socket)]
-                               (event (<! ch-chsk))         ;chsk/state
-                               (event (<! ch-chsk))         ;chsk/handshake
-                               (chsk-send! [:query/remote ?query])
-                               (cb (event (<! ch-chsk)))
-                               (def sente socket)
-                               (>! login socket))))))]
-    ;before login
-    (om/add-root! raux Login app)
-    (def reconciler raux)
-    ;after login
-    (go (let [socket     (<! login)
-              ch-chsk    (:ch-chsk socket)
-              chsk-send! (:chsk-send! socket)
-              ractual    (newr (fn [{q? :remote} cb]
-                                 (chsk-send! [:query/remote
-                                              (vec (concat
-                                                     (->> (filter list? q?)
-                                                          (group-by first)
-                                                          vals
-                                                          (map last))
-                                                     (distinct (remove list? q?))))])
-                                 (take! ch-chsk (comp cb
-                                                      #(om/tree->db App % true)
-                                                      event))))]
-          (om/remove-root! raux app)
-          (om/add-root! ractual App app)
-          (set! om/*raf*
-                (fn [f]
-                  (f)
-                  (! ractual ['(refresh/remote) :cycles])))
-          (def reconciler ractual)))))
+  (take! login
+    #(let [ch-chsk    (:ch-recv %)
+           chsk-send! (:send-fn %)
+           oldest     (fn [q] (if (list? q) (first q) q))
+           on-frame   (fn [f] (! *reconciler* [:entities]) (f))]
+       (om/remove-root! *reconciler* app)
+       (set! *reconciler*
+             (->> (fn [{?query :remote} cb]
+                    (let [query (into [] (distinct-by oldest) (rseq ?query))]
+                      (chsk-send! [::main query])
+                      (set! om/*raf* (fn [f] (on-frame f) (set! om/*raf* nil)))
+                      (take! ch-chsk (fn [msg] (cb (event msg)))))) ;todo: pass query and optimize
+                  (assoc config :send)
+                  (om/reconciler)))
+       (om/add-root! *reconciler* Main app))))

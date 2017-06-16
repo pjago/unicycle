@@ -1,15 +1,16 @@
 (ns unicycle.components
   (:require [com.stuartsierra.component :as component]
             [clojure.core.async :as async :refer [>!! <!! alts!! close! thread]]
-            [unicycle.core :as u]))
+            [unicycle.core :as u]
+            [org.httpkit.server :refer [run-server]]))
 
-(defn step [lab]                                            ;todo: move to remote
-  (let [data @lab]
+(defn step [state]                                            ;todo: move to remote
+  (let [data @state]
     (doseq [id (keys data) :let [auto (get data id)]]
       (if-let [act (:act auto)]
-        (alter lab update id #(->> act (u/act %) (u/sym %)))))))
+        (alter state update id #(->> act (u/act %) (u/sym %)))))))
 
-(defrecord Game [lab fps]
+(defrecord Game [state fps]
   component/Lifecycle
   (start [component]
     (let [history (async/chan (async/sliding-buffer (* fps 10)))
@@ -20,8 +21,8 @@
         (loop []
           (let [[_ ch] (alts!! [exit (async/timeout ms)])]
             (if-not (identical? exit ch)
-              (do (dosync (step lab))
-                  (>!! history @lab)
+              (do (dosync (step state))
+                  (>!! history @state)
                   (recur))
               (close! history)))))
       (assoc component
@@ -31,3 +32,24 @@
     (if-let [exit (:exit component)]
       (exit))
     (dissoc component :exit)))
+
+;DANIELZ SYSTEM ISSUE
+(defrecord WebServer [options server handler]
+  component/Lifecycle
+  (start [component]
+    (let [handler (get-in component [:handler :handler] handler)
+          server (run-server handler options)]
+      (assoc component :server server)))
+  (stop [component]
+    (when server
+      (server)
+      component)))
+
+(defn new-web-server
+  ([port]
+   (new-web-server port nil {}))
+  ([port handler]
+   (new-web-server port handler {}))
+  ([port handler options]
+   (map->WebServer {:options (merge {:port port} options)
+                    :handler handler})))

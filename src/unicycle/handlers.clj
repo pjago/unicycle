@@ -7,42 +7,41 @@
             [ring.util.response :refer [content-type response resource-response]]))
 
 (def parser (om/parser {:read p/read :mutate p/mutate}))
-
-(defn by [id]
-  (filter #(clojure.string/includes?
-             (or (:id (val %)) "")
-             (or id ""))))
-
+(def query-response #(into {} (filter (fn [[k _]] (keyword? k))) %))
 (def pretty-response #(response (with-out-str (clojure.pprint/pprint %))))
 
-(defn ring-handler [{:as env :keys [lab log users sente]}]
+(defn ring-handler [{:as env :keys [state log tags]}]
   (routes
     (GET "/" []
-      (-> (resource-response "index.html")
+      (-> (resource-response "unicycle.html")
           (content-type "text/html")))
-    (GET "/users" []
-      (-> (pretty-response @users)
-          (content-type "text/plain")))
     (GET "/log" []
       (-> (pretty-response @log)
           (content-type "text/plain")))
-    (GET "/lab/:id" [id]
-      (-> (response (into {} (by id) @lab))
+    (GET "/tags" []
+      (-> (pretty-response @tags)
+          (content-type "text/plain")))
+    (GET "/tag" []
+      (-> (response @state)
           (content-type "application/json")))
-    (POST "/lab/:id" [id :as {?query :body-params url :remote-addr}]
-      (when (-> @users (get url) (get id))
+    (GET "/tag/:id" [id]
+      (-> (response (select-keys @state (get @tags id)))
+          (content-type "application/json")))
+    (POST "/tag/:id" [id :as {?query :body-params url :remote-addr}]
+      (when (-> @tags (get url) (get id))
         (-> (assoc env :uid id :url url)
             (parser ?query)
-            (dosync))))
+            (dosync)
+            (query-response)
+            (content-type "application/json"))))
     (route/resources "/" {:root ""})))
 
 (defn sente-handler [{:as env send! :chsk-send!}]
-  (fn [{:as msg id :uid {addr :remote-addr} :ring-req}]
+  (fn [{:as msg uid :uid {url :remote-addr} :ring-req}]
     (when-let [?query (event msg)]
-      (cond-> (-> (assoc env :uid id :url addr)
-                  (parser ?query)
-                  (dosync))
-        (some (complement list?) ?query)                    ;todo: simpler
-        (->> (into {} (filter (fn [[k _]] (keyword? k))))
-             (vector :query/remote)
-             (send! id))))))
+      (-> (assoc env :uid uid :url url)
+          (parser ?query)
+          (dosync)
+          (->> (query-response)
+               (vector ::sente)
+               (send! uid))))))
