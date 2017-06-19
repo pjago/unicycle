@@ -1,28 +1,30 @@
-(ns unicycle.socket)
-
-#?(:cljs (enable-console-print!))
+(ns unicycle.socket
+  (:require [taoensso.sente.packers.transit :as sente-transit]
+            [om.tempid :refer [tempid #?(:cljs TempId)]]
+            [om.transit #?@(:cljs [:refer [TempIdHandler]])])
+  #?(:clj (:import [com.cognitect.transit ReadHandler]
+                   [om.tempid TempId]
+                   [om.transit TempIdHandler])))
 
 (derive :unicycle.handlers/sente ::query-response)
 (derive :unicycle.app/login ::query)
 (derive :unicycle.app/main ::query)
 
-(def base-cycle                                             ;unicycle specific
-  {:tag      ""
-   :type     :entity/cycle
-   :position [0.0 0.0 1.0]
-   :yaw      0.0
-   :kp       0.5
-   :ko       1.0
-   :eps      10
-   :wheels   [:omni 0.2]
-   :engine   [3 30]})
-
-(def base-target                                            ;unicycle specific
-  {:tag      "target"
-   :type     :entity/target
-   :position [1.0 1.0 1.0]
-   :yaw      0
-   :size     0.2})
+#?(:clj
+   (defn get-packer []
+     (sente-transit/->TransitPacker :json
+       {:handlers {TempId (TempIdHandler.)}}
+       {:handlers {"om/id" (reify
+                             ReadHandler
+                             (fromRep [_ id] (TempId. id)))}})))
+#?(:cljs
+   (defn get-packer []
+     (sente-transit/->TransitPacker :json
+       {:handlers {TempId (TempIdHandler.)}}
+       {:handlers {"om/id" (fn [id] (tempid id))
+                   "n" (fn [n] (js/Number n))
+                   "ratio" (fn [[n d]] (/ (js/Number n)
+                                          (js/Number d)))}})))
 
 (defmulti event :id)
 
@@ -49,12 +51,11 @@
 
 (defmethod event :chsk/uidport-open [{uid :uid {url :remote-addr} :ring-req}]
   (println "New connection:" url uid)
-  `[(entity/new ~(assoc base-cycle :tag uid))
-    (entity/new ~base-target)])
+  `[(tag/new)])
 
 (defmethod event :chsk/uidport-close [{uid :uid {url :remote-addr} :ring-req}]
   (println "Disconnected:" url uid)
-  `[(entity/delete)])
+  `[(tag/delete)])
 
 (defmethod event :default [{e :event}]
   (println "Unhandled event: %s" e))

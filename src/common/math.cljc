@@ -39,20 +39,20 @@
 (defn closest [keyfn to]
   (monotone
     (fn ([] +inf)
-        ([v y] (-> (keyfn v)
-                   (dist to)
-                   (as-> x (if (<= x y)
-                             x)))))))
+        ([m y] (if-let [v (keyfn m)]
+                 (let [x (dist v to)]
+                   (if (<= x y)
+                     x)))))))
 
 ;UNITS
-(def ^:const fps 60)
+(def ^:const fps 30)
 (def ^:const dt (| fps))
 (def ^:const rad:s->rpm (| 60 τ))
 (def ^:const m:s->km:h 3.6)
 (def ^:const rad->deg (| 180 π))
 
-(s/def ::R (s/double-in))
-(s/def ::R+ (s/double-in :min 0))
+(s/def ::R (s/or :int int? :double (s/double-in)))
+(s/def ::R+ (s/or :zero zero? :int pos-int? :double (s/double-in :min 0)))
 (s/def ::fuzzy (s/double-in :min -1 :max 1))
 
 ;BOUNDARY
@@ -75,7 +75,7 @@
   ([v abs] (-> v (map (- abs) abs 0 1) (mod 1) (map 0 1 (- abs) abs)))
   ([v inf sup] (-> v (map inf sup 0 1) (mod 1) (map 0 1 inf sup))))
 
-;HOMOGENEOUS COORDINATES todo: generic dimension
+;HOMOGENEOUS COORDINATES
 (s/def ::position (s/cat :X (s/+ ::R) :A #{1.0}))
 (s/def ::yaw ::R)
 (s/def ::body (s/keys :req-un [::position ::yaw]))

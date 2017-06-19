@@ -40,24 +40,28 @@
          '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl]]
          '[system.repl :refer [start stop reset]]
          '[system.boot :refer [system run]]
-         '[unicycle.systems :refer [uni-system]])
+         '[unicycle.systems :as sys :refer [uni-system]])
 
 (task-options!
-  run  {:main-namespace "unicycle.server"}
-  pom  {:project     +project+
-        :version     +version+
-        :description "Plataforma de aprendizado de controle digital"
-        :url         "https://github.com/pjago/unicycle"
-        :scm         {:url "https://github.com/pjago/unicycle"}
-        :license     {"The MIT License (MIT)" "http://opensource.org/licenses/mit-license.php"}})
+  run {:main-namespace "unicycle.server"}
+  pom {:project     +project+
+       :version     +version+
+       :description "Plataforma de aprendizado de controle digital"
+       :url         "https://github.com/pjago/unicycle"
+       :scm         {:url "https://github.com/pjago/unicycle"}
+       :license     {"The MIT License (MIT)" "http://opensource.org/licenses/mit-license.php"}})
 
 (deftask build []
-  (comp (aot :all true)
-        (uber)
+  (comp (cljs :optimizations :advanced
+              :compiler-options {:parallel-build true})
+        (uber :exclude #{#"(?i)^META-INF/[^/]*\.(MF|SF|RSA|DSA)$"
+                         #"(?i)^META-INF/INDEX.LIST$"
+                         #".*\.html"
+                         #"license"
+                         #"LICENSE"})
+        (aot :all true)
         (jar :file "unicycle.jar"
              :main 'unicycle.server)
-        (sift :include #{#"unicycle.jar"})
-        (cljs :optimizations :advanced)
         (zip :file "unicycle.zip")
         (target)))
 
@@ -65,20 +69,21 @@
   (comp (environ :env {:http-port +port+
                        :ip-server +ipv4+})
         (watch)
+        (repl :server true
+              :port 9000)
         (system :sys     #'uni-system
                 :auto    true
                 :mode    :lisp
                 :files   [".*\\.cljc" ".*\\.clj"]
                 :regexes true)
-        (repl :server true
-              :port 9000)
         (reload)
         (serve :port 3000
                :dir  "target")
         (cljs-repl :nrepl-opts {:port 9001})
         (cljs :source-map       true
               :compiler-options {:preloads '[unicycle.user]})
-        (notify :audible true)))
+        (notify :audible true)
+        (target)))
 
 (deftask ^:private collect-clojars-credentials
   "Collect CLOJARS_USER and CLOJARS_PASS from the user if they're not set."

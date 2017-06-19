@@ -21,7 +21,7 @@
                :text     {:value   id
                           :zOffset 0.5
                           :align   "center"
-                          :color   'brown
+                          :color   'gray
                           :height  2.0
                           :width   2.0}
                :rotation [180 0 180]})))
@@ -36,10 +36,10 @@
                         :depth     size}}
             children))
 
-(defn wheel [{:keys [number diameter position yaw]}]
+(defn wheel [{:keys [number diameter position yaw] :or {yaw 0}}]
   (a-entity {:key      (str "wheel " number)
              :position (+ position [0 0 (/ diameter 2)])
-             :rotation [(- (* a/rad->deg yaw)) 90 180]
+             :rotation [(- yaw) 90 180]
              :material {:color 'black}
              :geometry {:primitive      'cylinder
                         :radius         (/ diameter 2)
@@ -55,12 +55,20 @@
              :geometry {:primitive 'cylinder
                         :height    (* size 0.75)
                         :radius    size}}
-    (a-entity {:key      "wheel"
-               :position [0 (* size -0.5) 0]
-               :rotation [180 0 180]
-               :material {:color 'black}
-               :geometry {:primitive 'sphere
-                          :radius    (/ size 2)}})))
+    (a-entity {:key      "rotation"
+               :rotation [-90 -90 -90]}
+      (wheel {:number   0
+              :diameter (* 0.65 size)
+              :position (* size [1     0     -0.6] 0.92)
+              :yaw      90})
+      (wheel {:number   1
+              :diameter (* 0.65 size)
+              :position (* size [-0.5  0.866 -0.6] 0.92)
+              :yaw      30})
+      (wheel {:number   2
+              :diameter (* 0.65 size)
+              :position (* size [-0.5 -0.866 -0.6] 0.92)
+              :yaw      150}))))
 
 (defmethod a-cycle :uni [{[_ size] :wheels}]
   (chassis {:size     size
@@ -107,10 +115,27 @@
              :rotation [180 0 180]
              :material {:opacity 0.3}
              :geometry {:primitive 'circle
-                        :radius    size}}))
+                        :radius    size}}
+    (a-entity {:key      "rotate"
+               :rotation [-180 0 -180]}
+      (tag {:tag "-o>"}))))
 
-(defhot entity [position yaw]
+(defhot entity2d [position yaw]
   (web/a-entity {:position position
                  :rotation [0 0 (* a/rad->deg yaw)]}
     [cycle
      target]))
+
+(comment
+  (deftag menu [keys vals])
+  ;etc
+  (dehot window [position]
+    (let [[right top z-index] position
+          style #js{:position "absolute"
+                    :right    right
+                    :top      top
+                    :zIndex   z-index}]
+      (dom/div #js{:style style}
+        (if minimize ;local state
+          ;etc
+          [menu])))))

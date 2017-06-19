@@ -1,14 +1,14 @@
-(ns unicycle.parser                                         ;todo: remove cycle specifics
+(ns unicycle.parser
   (:refer-clojure :exclude [read])
   (:require [om.next :as om]
             [common.math :refer [π] :as a]))
 
 (defmulti read om/dispatch)
 
-(defmethod read :entities [{:keys [ast query] app :state} key params]
-  (let [{:keys [state] :as data} @app]
+(defmethod read :tags [{:keys [state ast query]} key params]
+  (let [{:keys [stream] :as data} @state]
     {:value  (om/db->tree query (get data key) data)
-     :remote (or (= state :on) (some? params))}))
+     :remote (or (= stream :on) (= (:target ast) :remote))}))
 
 (defmethod read :default [{app :state} key _]
   (if-let [found (get @app key)]
@@ -16,10 +16,11 @@
     {:value ::not-found}))
 
 (defmethod read :uid [{app :state} _ _]
-  (if-let [found (:uid @app)]
-    {:value  found}
-    {:value  ::not-found
-     :remote true}))
+  (let [uid (:uid @app)]
+    (if-not (om/tempid? uid)
+      {:value  uid}
+      {:value  ::not-found
+       :remote true})))
 
 (defmulti mutate om/dispatch)
 
@@ -35,38 +36,40 @@
                     [(.-x mouse) (.-y mouse) (.-z mouse)]
                     (swap! app assoc :mouse mouse)))})
 
-(defmethod mutate 'position/set [{:keys [ast] app :state} _ {:keys [select]}]
+(defmethod mutate 'position/set [{:keys [state ast]} _ {:keys [select]}]
   (let [path     (conj select :position)
-        position (:mouse @app)]
-    {:action #(swap! app assoc-in path position)
-     :remote (assoc ast :key 'entity/merge
+        position (:mouse @state)]
+    {:action #(swap! state assoc-in path position)
+     :remote (assoc ast :key 'tag/merge
                         :params {:tag      (peek select)
                                  :position position})}))
 
-(defmethod mutate 'yaw/set [{:keys [ast] app :state} _ {select :select Δ :delta}]
+(defmethod mutate 'yaw/set [{:keys [state ast]} _ {select :select Δ :delta}]
   (let [path (conj select :yaw)
-        yaw  (a/cycle (+ (get-in @app path) Δ) π)]
-    {:action #(swap! app assoc-in path yaw)
-     :remote (assoc ast :key 'entity/merge
+        yaw  (a/cycle (+ (get-in @state path) Δ) π)]
+    {:action #(swap! state assoc-in path yaw)
+     :remote (assoc ast :key 'tag/merge
                         :params {:tag (peek select)
                                  :yaw yaw})}))
 
-(defmethod mutate 'state/toggle [{app :state} _ _]
-  {:action #(swap! app update :state {:on :off :off :on})
+(defmethod mutate 'stream/toggle [{app :state} _ _]
+  {:action #(swap! app update :stream {:on :off :off :on})
    :remote true})
 
 (defmethod mutate 'select/mouse [{app :state} _ _]
-  (let [{:keys [state mouse] :as data} @app
-        it (->> (om/db->tree [:type :tag :position] (:entities data) data)
+  (let [{:keys [mouse] :as data} @app
+        it (->> (om/db->tree [:type :tag :position] (:tags data) data)
                 (into [] (a/closest :position mouse))
                 (peek)
                 ((juxt :type :tag)))]
     {:action #(swap! app assoc :select it)}))
 
 (defmethod mutate 'select/menu [{app :state} _ _]
-  (let [it [:entity/menu "_menu"]]
+  (let [it [:window/menu "_menu"]]
     {:action #(swap! app assoc :select it)}))
 
-(defmethod mutate 'uid/set [{app :state} _ {name :value}]
-  {:action #(swap! app assoc :client-id name)
-   :remote (nil? (:uid @app))})
+(defmethod mutate 'uid/set [{:keys [state ast]} _ {name :tag}]
+  (let [uid (:uid @state)]
+    (when (om/tempid? uid)
+      {:action #(swap! state assoc :client-id name)
+       :remote (update ast :params assoc :tempid uid)})))

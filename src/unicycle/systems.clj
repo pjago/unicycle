@@ -1,6 +1,7 @@
 (ns unicycle.systems
   (:require [unicycle.handlers :refer [ring-handler sente-handler]]
-            [unicycle.components :refer [map->Game new-web-server]]
+            [unicycle.components :refer [map->Game]]
+            [unicycle.socket :refer [get-packer]]
             [environ.core :refer [env]]
             [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
@@ -8,7 +9,8 @@
             [compojure.middleware :refer [wrap-canonical-redirect]]
             [com.stuartsierra.component :as component]
             (system.components
-              ;[http-kit :refer [new-web-server]]
+              [http-kit :refer [new-web-server]]
+              ;[immutant-web :refer [new-web-server]]
               [sente :refer [new-channel-sockets sente-routes]]
               [handler :refer [new-handler]]
               [endpoint :refer [new-endpoint]]
@@ -25,7 +27,6 @@
 (def ip (or (env :ip-server) "127.0.0.1"))
 
 (def pool (atom {}))
-
 (defn new-uid [{cid :client-id url :remote-addr}]
   (swap! pool update cid
          #(if-not ((set %) url)
@@ -41,7 +42,8 @@
 (def init-data
   {:state {}
    :log   []
-   :tags  {}})
+   :roots {}
+   :links {}})
 
 (def site
   (-> site-defaults
@@ -55,30 +57,36 @@
 
 ;systems
 (defn uni-system []
-  (component/system-map
-    :state (ref (:state init-data))
-    :log (ref (:log init-data))
-    :tags (ref (:tags init-data))
-    :game (component/using
-            (map->Game {:fps 60})
-            [:state])
-    :sente (component/using
-             (new-channel-sockets sente-handler (get-sch-adapter)
-               {:user-id-fn      #'new-uid
-                :wrap-component? true})
-             [:state :log :tags])
-    :app-middleware (new-middleware {:middleware [wrap-restful-format]})
-    :middleware (new-middleware {:middleware [[wrap-defaults site]
-                                              [wrap-canonical-redirect redirect]]})
-    :sente-endpoint (component/using
-                      (new-endpoint sente-routes)
-                      [:sente])
-    :app-endpoints (component/using
-                     (new-endpoint ring-handler)
-                     [:state :log :tags :app-middleware])
-    :handler (component/using
-               (new-handler)
-               [:sente-endpoint :app-endpoints :middleware])
-    :http (component/using
-            (new-web-server port nil {:ip ip})
-            [:handler])))
+  (let [sys (component/system-map
+              :state (ref (:state init-data))
+              :log   (ref (:log init-data))
+              :roots (ref (:roots init-data))
+              :links (ref (:links init-data))
+              :game (component/using
+                      (map->Game {:fps 30})
+                      [:state])
+              :sente (component/using
+                       (new-channel-sockets sente-handler (get-sch-adapter)
+                                            {:user-id-fn      #'new-uid
+                                             :packer          (get-packer)
+                                             :wrap-component? true})
+                       [:state :log :roots :links])
+              :app-middleware (new-middleware {:middleware [wrap-restful-format]})
+              :middleware (new-middleware {:middleware [[wrap-defaults site]
+                                                        [wrap-canonical-redirect redirect]]})
+              :sente-endpoint (component/using
+                                (new-endpoint sente-routes)
+                                [:sente])
+              :app-endpoints (component/using
+                               (new-endpoint ring-handler)
+                               [:state :log :roots :links :app-middleware])
+              :handler (component/using
+                         (new-handler)
+                         [:sente-endpoint :app-endpoints :middleware])
+              :http (component/using
+                      (new-web-server port nil {:ip ip})
+                      [:handler]))]
+    (def system sys)
+    sys))
+
+

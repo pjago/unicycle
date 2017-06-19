@@ -7,41 +7,36 @@
             [ring.util.response :refer [content-type response resource-response]]))
 
 (def parser (om/parser {:read p/read :mutate p/mutate}))
-(def query-response #(into {} (filter (fn [[k _]] (keyword? k))) %))
-(def pretty-response #(response (with-out-str (clojure.pprint/pprint %))))
 
-(defn ring-handler [{:as env :keys [state log tags]}]
+(defmacro with-env [env with query]
+  (let [ks (map keyword with)]
+    `(dosync (parser (assoc ~env ~@(interleave ks with)) ~query))))
+
+(defn ring-handler [{:keys [state log roots links] :as this}]
   (routes
-    (GET "/" []
+    (GET "/" [] ;todo: "/user/pedro" -> application with uid pedro! (1st render from server)
       (-> (resource-response "unicycle.html")
           (content-type "text/html")))
-    (GET "/log" []
-      (-> (pretty-response @log)
-          (content-type "text/plain")))
+    (GET "/log" [] (str @log))
+    (GET "/roots" []
+      (-> (response @roots)
+          (content-type "application/json")))
+    (GET "/links" []
+      (-> (response @links)
+          (content-type "application/json")))
     (GET "/tags" []
-      (-> (pretty-response @tags)
-          (content-type "text/plain")))
-    (GET "/tag" []
       (-> (response @state)
           (content-type "application/json")))
-    (GET "/tag/:id" [id]
-      (-> (response (select-keys @state (get @tags id)))
+    (GET "/tags/:uid" [uid]
+      (-> (response (select-keys @state (get @links uid)))
           (content-type "application/json")))
-    (POST "/tag/:id" [id :as {?query :body-params url :remote-addr}]
-      (when (-> @tags (get url) (get id))
-        (-> (assoc env :uid id :url url)
-            (parser ?query)
-            (dosync)
-            (query-response)
+    (POST "/tags/:uid" [uid :as {?query :body-params url :remote-addr}]
+      (when (-> @links (get url) (get uid))
+        (-> (with-env this [url uid] ?query)
             (content-type "application/json"))))
     (route/resources "/" {:root ""})))
 
-(defn sente-handler [{:as env send! :chsk-send!}]
+(defn sente-handler [{send! :chsk-send! :as this}]
   (fn [{:as msg uid :uid {url :remote-addr} :ring-req}]
-    (when-let [?query (event msg)]
-      (-> (assoc env :uid uid :url url)
-          (parser ?query)
-          (dosync)
-          (->> (query-response)
-               (vector ::sente)
-               (send! uid))))))
+    (if-let [?query (event msg)]
+      (send! uid [::sente (with-env this [url uid] ?query)]))))

@@ -1,8 +1,7 @@
 (ns unicycle.components
   (:require [com.stuartsierra.component :as component]
             [clojure.core.async :as async :refer [>!! <!! alts!! close! thread]]
-            [unicycle.core :as u]
-            [org.httpkit.server :refer [run-server]]))
+            [unicycle.core :as u])) ;to remove
 
 (defn step [state]                                            ;todo: move to remote
   (let [data @state]
@@ -32,24 +31,3 @@
     (if-let [exit (:exit component)]
       (exit))
     (dissoc component :exit)))
-
-;DANIELZ SYSTEM ISSUE
-(defrecord WebServer [options server handler]
-  component/Lifecycle
-  (start [component]
-    (let [handler (get-in component [:handler :handler] handler)
-          server (run-server handler options)]
-      (assoc component :server server)))
-  (stop [component]
-    (when server
-      (server)
-      component)))
-
-(defn new-web-server
-  ([port]
-   (new-web-server port nil {}))
-  ([port handler]
-   (new-web-server port handler {}))
-  ([port handler options]
-   (map->WebServer {:options (merge {:port port} options)
-                    :handler handler})))

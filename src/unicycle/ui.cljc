@@ -1,13 +1,14 @@
-(ns unicycle.ui)
+(ns unicycle.ui
+  (:require [clojure.string :refer [split join capitalize]]))
 
-(def camel #(symbol (clojure.string/capitalize %)))
-(def typed #(keyword "entity" (str %)))
+(defn camel [input-symbol]
+  (let [words (split (name input-symbol) #"[\s_-]+")]
+    (symbol (join "" (map capitalize words)))))
 
 #?(:clj
    (defmacro deftag [name args & body]
      (let [-name (symbol (str "-" name))
            Name  (camel name)
-           type  (typed name)
            query (mapv keyword args)]
        `(do (defn ~-name [{:keys ~args}] ~@body)
             (om.next/defui ~Name
@@ -21,7 +22,8 @@
 
 #?(:clj
    (defmacro defhot [name args body]
-     (let [Name  (camel name)
+     (let [typed #(keyword (str name) (str %))
+           Name  (camel name)
            query (into [:type :tag] (mapv keyword args))
            union {:name (last body)
                   :Name (mapv camel (last body))
@@ -48,4 +50,4 @@
                            `[(apply (case ~type ~@(interleave (:type union) (:name union)))
                                     (dissoc ~props ~@query)
                                     (om.next/children ~this))]))))
-            (def ~name (om.next/factory ~Name {:keyfn :tag}))))))
+            (def ~name (om.next/factory ~Name {:keyfn (comp str (juxt :type :tag))}))))))

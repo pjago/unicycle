@@ -90,19 +90,23 @@
 (defmulti act (fn [hot _] (-> hot :wheels first)))
 
 (defmethod act :omni [auto omni]
-  (->> auto
-       :engine
-       (cons (-> auto :engine first))
-       (map a/constrain omni)))
+  (if-not (s/valid? ::omni omni) [0 0 0]
+    (->> auto
+         :engine
+         (cons (-> auto :engine first))
+         (map a/constrain omni))))
 
 (defmethod act :uni [auto uni]
-  (->> auto :engine (map a/constrain uni)))
+  (if-not (s/valid? ::uni uni) [0 0]
+    (->> auto :engine (map a/constrain uni))))
 
 (defmethod act :car [auto car]
-  (->> auto :engine (map a/constrain car)))
+  (if-not (s/valid? ::car car) [0 0]
+    (->> auto :engine (map a/constrain car))))
 
 (defmethod act :dff [{eng :engine} dff]
-  (a/upper-bound dff (* (apply a// eng) (count eng))))
+  (if-not (s/valid? ::dff dff) [0 0]
+    (a/upper-bound dff (* (apply a// eng) (count eng)))))
 
 ;SYM
 (defn uni-sym [{:keys [yaw] :as it} [v w]]
