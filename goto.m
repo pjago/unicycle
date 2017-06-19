@@ -3,7 +3,7 @@
     %2. Acesse http://localhost:3001/tags em outra aba
     %3. Na aba inicial, interaja com a planta (tag ~ variável)
     %4. Atualize a aba /tags, esse é o ponto de acesso para o .m
-    %5. Execute goto(nome, 'target') e observe
+    %5. Execute goto(nome, 'target', mode) %mode = 0,1,2,3 ou 4
 
 function [y, r, e, u, pwm] = goto(UID, TAG, varargin)
     addpath(genpath('src'))
