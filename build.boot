@@ -52,17 +52,14 @@
        :license     {"The MIT License (MIT)" "http://opensource.org/licenses/mit-license.php"}})
 
 (deftask build []
-  (comp (cljs :optimizations :advanced
+  (comp (cljs :optimizations :none
               :compiler-options {:parallel-build true})
-        (uber :exclude #{#"(?i)^META-INF/[^/]*\.(MF|SF|RSA|DSA)$"
-                         #"(?i)^META-INF/INDEX.LIST$"
-                         #".*\.html"
-                         #"license"
-                         #"LICENSE"})
         (aot :all true)
+        (pom)
+        (uber)
         (jar :file "unicycle.jar"
              :main 'unicycle.server)
-        (zip :file "unicycle.zip")
+        (sift :include #{#"unicycle.jar"})
         (target)))
 
 (deftask dev []

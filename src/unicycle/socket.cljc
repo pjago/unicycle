@@ -6,6 +6,8 @@
                    [om.tempid TempId]
                    [om.transit TempIdHandler])))
 
+#?(:cljs (enable-console-print!))
+
 (derive :unicycle.handlers/sente ::query-response)
 (derive :unicycle.app/login ::query)
 (derive :unicycle.app/main ::query)

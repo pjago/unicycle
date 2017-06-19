@@ -18,5 +18,5 @@
     (doto (JFrame. (str "Serving at http://localhost:" port))
       (.setSize 500 1)
       (.setDefaultCloseOperation (. JFrame EXIT_ON_CLOSE))
-      (.addWindowListener on-exit)
+      ;(.addWindowListener on-exit)
       (.setVisible true))))
