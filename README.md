@@ -1,14 +1,6 @@
-# unicycle
-[Misc](http://www.irccyn.ec-nantes.fr/~martinet/Mobrob/KinematicModelling.pdf)
-[Car](http://nfs.gongkong.com/u_files/robot/zl/chap4.pdf)
-
-To compile the browser:
-
-lein repl
-(start)
-(-main "3000") ;to also start the server
-
-To run the server:
-
-sudo /etc/init.d/apache2 restart
-java -jar unicycle-0.0.0-standalone.jar 3000
+    %0. Inicie o servidor unicycle.jar
+    %1. Acesse http://localhost:3001/ no chrome e escolha um nome
+    %2. Acesse http://localhost:3001/tags em outra aba
+    %3. Na aba inicial, interaja com a planta (tag ~ variável)
+    %4. Atualize a aba /tags, esse é o ponto de acesso para o .m
+    %5. Execute goto(nome, 'target) e deixa um like

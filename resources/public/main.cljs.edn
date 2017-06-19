@@ -1,5 +1,0 @@
-{:require [unicycle.app]
- :init-fns [unicycle.app/-main]
- :boot-reload {:on-jsload unicycle.app/-main}
- :compiler-options {:asset-path "public/main.out"
-                    :parallel-build true}}
