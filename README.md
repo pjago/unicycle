@@ -1,25 +1,3 @@
-# unicycle
+# unicycle (clj)
 [Misc](http://www.irccyn.ec-nantes.fr/~martinet/Mobrob/KinematicModelling.pdf)
 [Car](http://nfs.gongkong.com/u_files/robot/zl/chap4.pdf)
-
-To update gh-pages:
-
-Compile the javascript by 'lein cooper'
-
-remove '/resources/' from .gitignore
-
-git add -A
-
-git commit "update gh-pages"
-
-git subtree push --prefix resources/public origin gh-pages
-
-add '/resources/' to .gitignore
-
-git rm -r resources
-
-git add -A
-
-git commit "please help"
-
-find a better way to do it.
