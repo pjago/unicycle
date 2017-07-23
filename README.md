@@ -12,3 +12,6 @@ To run the server:
 
 sudo /etc/init.d/apache2 restart
 java -jar unicycle-0.0.0-standalone.jar 3000
+
+"Use of undeclared Var cljs.user/? ... at line 1"
+usually means the file encoding is "UTF-8 BOM" where it should be "UTF-8"

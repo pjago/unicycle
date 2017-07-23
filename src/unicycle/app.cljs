@@ -1,10 +1,14 @@
-(ns unicycle.app
+(ns unicycle.app ;todo: make a clj version
+  (:refer-clojure :exclude [read])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [om.next :refer [defui]])
   (:require [unicycle.ui :as ui]
-            [unicycle.parser :as p]
+            [unicycle.tags :as tags]
+            [unicycle.parser :as p :refer [grammar read mutate]]
             [unicycle.socket :refer [event get-packer]]
+            [common.cljc :as cljc]
             [common.web :as web]
+            [common.math :as a]
             [goog.dom :as gdom]
             [om.next :as om :refer [transact!] :rename {transact! !}]
             [om.dom :as dom]
@@ -13,63 +17,97 @@
 
 ;data
 (defonce init-data
-  (let [uid    (om/tempid "_user")
-        -cycle {:type     :entity2d/cycle
-                :position [0.0 0.0 1.0]
-                :yaw      0.0
-                :wheels   [:omni 0.2]
-                :engine   [3 30]}
-        target {:type     :entity2d/target
-                :position [1.0 1.0 1.0]
-                :yaw      -2.356
-                :size     0.2}]
-    {:uid             uid
-     :stream          :on                                              ;#{:on :off}
-     :mouse           [0.0 0.0 1.0]
-     :select          [:window/menu "_menu"]
-     :tags            [[:entity2d/cycle  uid]
-                       [:entity2d/target uid]
-                       [:entity2d/target "target"]]
-     :entity2d/cycle  {uid      (assoc -cycle :tag uid)}
-     :entity2d/target {uid      (assoc target :tag uid)
-                       "target" (assoc target :tag "target")}
-     ::om/tables      #{:entity2d/target
-                        :entity2d/cycle}}))
+  (let [user (om/tempid "user") ;todo: remove
+        robo (om/tempid "robo")]
+    {:uid          user
+     :stream       :off                                              ;#{:on :off}
+     :mouse        [0.0 0.0 1.0]
+     :select       :menu
+     :tag/user     [[::ui/position user]
+                    [::ui/rotation user]
+                    [::ui/wheels   user]
+                    [::ui/target   user]]
+     :tag/robo     [[::ui/position robo]
+                    [::ui/rotation robo]
+                    [::ui/target   robo]]
+     ::ui/position {user (ui/->Position# 0 0 1)
+                    robo (ui/->Position# 1 1 1)}
+     ::ui/rotation {user (ui/->Rotation# 0)
+                    robo (ui/->Rotation# 0)}
+     ::ui/wheels   {user (ui/->Wheels# :omni 0.2)}
+     ::ui/target   {user (ui/->Target# 0.2)
+                    robo (ui/->Target# 0.2)}
+     ::om/tables   #{::ui/position
+                     ::ui/rotation
+                     ::ui/wheels
+                     ::ui/target}}))
 
 (declare app-state)
 
 ;actions
-(defn stream-toggle [_]
-  [`(stream/toggle)
+(cljc/alter-var-root #'grammar
+  #(-> (derive % :tag/user ::p/tags)
+       (derive :tag/robo ::p/tags)))
+
+(defn stream-toggle []
+  [`(stream-toggle)
    :stream])
 
-(defn mouse-model [e]
-  [`(mouse/model {:x   ~e.clientX
-                  :y   ~e.clientY
-                  :ref ~(gdom/getElement "camera")})
-   :mouse])
+(defmethod mutate `stream-toggle [{app :state} _ _]
+  {:action #(swap! app update :stream {:on :off :off :on})
+   :remote true})
+
+(defn mouse-model [event ref]
+  (let [r   (new js/THREE.Raycaster)
+        z   (new js/THREE.Plane (new js/THREE.Vector3 0 0 1) -1)
+        v   (new js/THREE.Vector2
+                 (- (* (/ event.clientX js/window.innerWidth) 2) 1)
+                 (- 1 (* (/ event.clientY js/window.innerHeight) 2)))
+        cam (-> ref .-object3D .-children (aget 0))]
+    (.setFromCamera r v cam)
+    [`(mouse-model {:value ~(.intersectPlane (.-ray r) z)})
+     :mouse]))
+
+(defmethod mutate `mouse-model [{app :state} _ {mouse :value}]
+  {:action #(swap! app assoc :mouse mouse)})
 
 (defn select-mouse []
-  [`(select/mouse)
+  [`(select-mouse)
    :select])
+
+(defmethod mutate `select-mouse [{app :state} _ _]
+  (let [{:keys [mouse] :as data} @app
+        it (->> (::ui/position data)
+                (into [] (a/closest (comp vals val) [(.-x mouse) (.-y mouse) (.-z mouse)]))
+                (peek)
+                (key))]
+    {:action #(swap! app assoc :select it)}))
 
 (defn select-menu []
-  [`(select/menu)
+  [`(select-menu)
    :select])
 
-(defn position-set [s]
-  [`(position/set {:select ~s})])
+(defmethod mutate `select-menu [{app :state} _ _]
+  {:action #(swap! app assoc :select :menu)})
 
-(defn yaw-set [s e]
-  [`(yaw/set {:select ~s
-              :delta  ~(* 0.0015708 e.deltaY)})])
-
-(defn uid-set
-  ([name] [`(uid/set {:tag ~name})
+(defn uid-set ;todo: remove
+  ([name] [`(uid-set {:tag ~name})
            :uid])
-  ([name e] (if (= e.key "Enter")
-              (uid-set name)
-              [])))
+  ([name event] (if (= (.-key event) "Enter")
+                  (uid-set name)
+                  [])))
+
+(defmethod mutate `uid-set [{:keys [state ast]} _ {name :tag}] ;todo: remove
+  (let [uid (:uid @state)]
+    (when (om/tempid? uid)
+      {:action #(swap! state assoc :client-id name)
+       :remote (update ast :params assoc :tempid uid)})))
+
+(defmethod read :uid [{app :state} _ _] ;todo: remove
+  (let [uid (:uid @app)]
+    (if-not (om/tempid? uid)
+      {:value uid}
+      {:value ::not-found :remote true})))
 
 ;root
 (declare *reconciler*)
@@ -81,7 +119,7 @@
       :top      0
       :left     0})
 
-(defui Login
+(defui Login ;todo: remove (server-side rendering)
   static om/IQuery
   (query [this]
     [:client-id])
@@ -105,21 +143,20 @@
   Object
   (render [this]
     (let [select (:select (om/props this))
-          tag    (or (and (not= select ::p/not-found)
-                          (peek select))
-                     "_menu")
+          tag    (if (= select ::p/not-found) :menu select)
+          cam    (:camera (om/props this))
           basic  #js{:style       background
                      :onMouseDown #(! *reconciler* (select-mouse))}]
       (case tag
-        "_menu" (-> #js{:onMouseMove #(! *reconciler* (mouse-model %))}
-                    (js/Object.assign basic)
-                    (dom/div))
-        (-> #js{:onWheel     #(! *reconciler* (yaw-set select %))
-                :onMouseMove #(->> (position-set select)
-                                   (into (mouse-model %))
+        :menu (-> #js{:onMouseMove #(! *reconciler* (mouse-model % (gdom/getElement cam)))}
+                  (js/Object.assign basic)
+                  (dom/div))
+        (-> #js{:onWheel     #(! *reconciler* (ui/spin tag %))
+                :onMouseMove #(->> (ui/drag tag (:mouse @app-state))
+                                   (into (mouse-model % (gdom/getElement cam)))
                                    (! *reconciler*))
                 :onMouseUp   #(->> (select-menu)
-                                   (into [(om/force `(:tags {:only [~tag]}) :remote)])
+                                   (into [(om/force [::ui/position tag] :remote)]) ;todo: remote ident reads
                                    (! *reconciler*))}
             (js/Object.assign basic)
             (dom/div))))))
@@ -130,64 +167,56 @@
 (defui Main
   static om/IQuery
   (query [this]
-    [:uid :client-id :stream :select {:tags (om/get-query ui/Entity2d)}])
+    [:uid :client-id :stream :select
+     {:tag/user (tags/get-query ::ui/position ::ui/rotation ::ui/wheels ::ui/target)} ;todo: joins
+     {:tag/robo (tags/get-query ::ui/position ::ui/rotation ::ui/target)}]) ;union needed for om-path
   Object
   (render [this]
-    (let [{:keys [uid client-id stream select tags]} (om/props this)]
+    (let [{:keys [uid client-id stream select :tag/user :tag/robo]} (om/props this)]
       (dom/div #js{:style background}
         #_(event listeners)
-        (mouse-listener {:select select})
+        (mouse-listener {:select select :camera "camera"})
         #_(show uid)
         (if-not (= uid ::p/not-found)
           (str uid)
-          (str client-id))
+          (str client-id)) ;todo: remove
         #_(show select)
         (dom/div #js{:style #js{:position "absolute"
                                 :bottom   0}}
           (str select))
         #_(toggle stream)
-        (dom/button #js{:onClick #(! this (stream-toggle %))
+        (dom/button #js{:onClick #(! this (stream-toggle))
                         :style   #js{:position "relative"
                                      :float    "right"}}
           (name stream))
         #_(vr scene)
         (dom/div #js{:style (js/Object.assign #js{:zIndex -1} background)}
-          (apply web/a-scene {:id  "scene"
-                              :key :scene}
-                 (web/a-entity {:id            "camera"
-                                :key           :camera
-                                :position      [0 0 -5]
-                                :near          0.75
-                                :rotation      [180 0 180]
-                                :camera        {:active true :zoom 2}
-                                :wasd-controls {:adInverted true :wsInverted true}})
-                 (map ui/entity2d tags)))))))
+          (web/a-scene {:id  "scene"
+                        :key :scene}
+                       (web/a-entity {:id            "camera"
+                                      :key           :camera
+                                      :position      [0 0 -5]
+                                      :near          0.75
+                                      :rotation      [180 0 180]
+                                      :camera        {:active true :zoom 2}
+                                      :wasd-controls {:adInverted true :wsInverted true}})
+                       (tags/draw user)
+                       (tags/draw robo)))))))
 
 ;om.next
-(defonce login (async/promise-chan))
+(defonce login (async/promise-chan)) ;todo: remove
 (defonce app-state (atom init-data))
 
-(defn merge-fn [reconciler state novelty _]
-  (if-let [tags (:tags novelty)]
-    (let [tagged (group-by last (:tags state))
-          idents (transduce (mapcat tagged)
-                            (completing #(assoc %1 %2 (tags (last %2))))
-                            {}
-                            (keys tags))]
-      (om/default-merge reconciler state (merge (dissoc novelty :tags) idents) nil))
-    (om/default-merge reconciler state novelty nil)))
-
 (def parser (om/parser {:read p/read :mutate p/mutate}))
-(def config {:logger    nil ;todo: merge :entities correctly
-             :state     app-state
-             :merge     merge-fn
-             :parser    parser
-             :normalize true
-             :remotes   [:remote]
-             :id-key    :tag})
+(def config {:logger       nil
+             :elide-paths? true
+             :state        app-state
+             :parser       parser
+             :normalize    true
+             :remotes      [:remote]})
 (def app (gdom/getElement "app"))
 
-(def ^:dynamic *reconciler*
+(def ^:dynamic *reconciler* ;todo: remove
   (->> (fn [{?query :remote} cb]
          (if-let [cid (-> ?query first last :tag)]
            (go (let [socket     (make-channel-socket-client! "/chsk" {:client-id cid
@@ -196,29 +225,23 @@
                      chsk-send! (:send-fn socket)
                      data       @app-state
                      tempuid    (:uid data)
-                     only-uid   (comp (map #(get-in data [% tempuid])) ;todo: treat them equal
-                                      (map #(dissoc % :type :tag)))
-                     isnt-uid   (comp (mapcat #(get data %)) ;todo: free on disconnect?
-                                      (map last)
-                                      (remove #(= (:tag %) tempuid))
-                                      (map #(dissoc % :type))
-                                      (map #(list `tag/new %)))
-                     user-tag   (into {} only-uid (::om/tables data))
-                     resources  (into [] isnt-uid (::om/tables data))]
+                     tags-xf    (comp (mapcat #(get data %)) ;todo: free on disconnect?
+                                      (map (fn [[k v]] `(tag/assoc {:tag ~k :value ~v}))))
+                     all-tags   (into [] tags-xf (::om/tables data))
+                     type-info  (tags/get-query ::ui/position ::ui/rotation ::ui/wheels ::ui/target)]
                  (event (<! ch-chsk))                       ;chsk/state
                  (event (<! ch-chsk))                       ;chsk/handshake
-                 (chsk-send! [::login (into `[(tag/root ~(om/get-query ui/Entity2d)) ;tags to listen
-                                              (tag/merge ~user-tag) ;the user tag initial value
-                                              ~@resources] ;create new tags as resources
-                                            ?query)])
-                 (event (<! ch-chsk)) ;for some reason the result comes back after a empty response
-                 (cb (event (<! ch-chsk)) (om/get-query Main)) ;this is the result
+                 (chsk-send! [::login `[(tag/root ~type-info) ~@?query ~@all-tags]])
+                 (event (<! ch-chsk))                       ;for some reason I have to do this
+                 (println "foo")
+                 (cb (event (<! ch-chsk)) (om/get-query Main))
+                 (println "brreak")
                  (defonce sente socket)
                  (>! login socket)))))
        (assoc config :send)
        (om/reconciler)))
 
-(om/add-root! *reconciler* Login app)
+(om/add-root! *reconciler* Login app) ;todo: remove
 
 (defn distinct-by [f]
   (let [seen (volatile! (transient #{}))]
@@ -228,25 +251,22 @@
                   (vswap! seen conj! y)
                   true))))))
 
-(defonce frame (async/chan 2))
-
-(go-loop []
-  (let [up (<! frame)]
-    (set! om/*raf* (fn [f] (! *reconciler* up) (f) (set! om/*raf* nil)))
-    (recur)))
-
 (defn -main [& args]
   (take! login
     #(let [ch-chsk    (:ch-recv %)
            chsk-send! (:send-fn %)
-           oldest     (fn [q] (if (list? q) (first q) q))]
+           oldest     (fn [q] (if (and (list? q) (not= (first q) 'quote)) ;todo: make it faster
+                                  (first q)
+                                  q))]
        (om/remove-root! *reconciler* app)
        (set! *reconciler*
              (->> (fn [{?query :remote} cb]
-                    (let [query (into [] (distinct-by oldest) (rseq ?query))
-                          up    [{:tags [:position :yaw]}]]
+                    (let [query (into [] (distinct-by oldest) (rseq ?query))]
                       (chsk-send! [::main query])
-                      (set! om/*raf* (fn [f] (! *reconciler* up) (f) (set! om/*raf* nil)))
+                      (if (= (:stream @app-state) :on)
+                        (let [up [(om/force [::ui/position '_] :remote)
+                                  (om/force [::ui/rotation '_] :remote)]]
+                          (set! om/*raf* (fn [f] (! *reconciler* up) (f) (set! om/*raf* nil)))))
                       (take! ch-chsk (fn [msg] (cb (event msg))))))
                   (assoc config :send)
                   (om/reconciler)))

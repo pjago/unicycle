@@ -1,5 +1,6 @@
 (ns common.web
   (:require [clojure.string :as str]                        ;todo: use om.dom/create-element
+            [om.dom :as dom]
             #?(:cljs [cljsjs.react])
             #?(:cljs [om.util :as util]))
   #?(:cljs (:require-macros [common.web :as web])))
@@ -28,44 +29,52 @@
                (vals m))))
 
 (def tags
-  #{"a-entity"
-    "a-animation"
-    "a-scene"
-    "a-assets"
-    "a-cubemap"
-    "a-mixin"
-    "a-node"
-    "a-register-element"})
+  #{'a-entity
+    'a-animation
+    'a-scene
+    'a-assets
+    'a-cubemap
+    'a-mixin
+    'a-node
+    'a-register-element})
+
+(defn ^:private gen-tag-inline-fn [tag]
+  `(defmacro ~tag [opts# & children#]
+     `(~'~(symbol "js" (str "React.createElement")) ~'~(str tag)
+        (-> ~opts# map->frame cljs.core/clj->js)
+        ~@(clojure.core/map (fn [x#] `(om.util/force-children ~x#)) children#))))
+
+(defmacro ^:private gen-tags-inline-fns []
+  (when (boolean (:ns &env))
+    `(do ~@(clojure.core/map gen-tag-inline-fn tags))))
 
 #?(:clj
    (do ;macro tag (it's faster)
-       (defn ^:private gen-tag-inline-fn [tag]
-         `(defmacro ~(symbol tag) [opts# & children#]
-            `(~'~(symbol "js" (str "React.createElement")) ~'~tag
-               (-> ~opts# map->frame cljs.core/clj->js)
-               ~@(clojure.core/map (fn [x#] `(om.util/force-children ~x#)) children#))))
-
-       (defmacro ^:private gen-tags-inline-fns []
-         `(do ~@(clojure.core/map gen-tag-inline-fn tags)))
-
        (gen-tags-inline-fns)
 
        ;fn tag (to apply)
        (defn ^:private gen-tag-fn [tag]
-         `(defn ~(symbol tag) [opts# & children#]
-            (apply js/React.createElement ~tag
+         `(defn ~tag [opts# & children#]
+            (apply js/React.createElement ~(str tag)
                    (-> opts# map->frame cljs.core/clj->js)
                    (cljs.core/map om.util/force-children children#))))
 
        (defmacro ^:private gen-tags-fns []
-         `(do ~@(clojure.core/map gen-tag-fn tags)))))
+         `(do ~@(clojure.core/map gen-tag-fn tags)))
+
+       ;server side rendering
+       (defmacro gen-all-tags []
+         (when-not (boolean (:ns &env))
+           `(do ~@(clojure.core/map om.dom/gen-tag-fn tags))))
+
+       (gen-all-tags)))
 
 #?(:cljs
    (do (web/gen-tags-fns)
 
        ;string tag (general)
        (defn element [tag opts & children]
-         (apply js/React.createElement tag
+         (apply js/React.createElement (str tag)
                 (-> opts map->frame clj->js)
                 (map util/force-children children)))
 

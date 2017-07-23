@@ -1,42 +1,46 @@
 (ns unicycle.socket
   (:require [taoensso.sente.packers.transit :as sente-transit]
             [om.tempid :refer [tempid #?(:cljs TempId)]]
-            [om.transit #?@(:cljs [:refer [TempIdHandler]])])
-  #?(:clj (:import [com.cognitect.transit ReadHandler]
+            [om.transit #?@(:cljs [:refer [TempIdHandler]])]
+            [unicycle.ui :refer [get-write-handler get-read-handler]])
+  #?(:clj (:import [com.cognitect.transit WriteHandler ReadHandler]
                    [om.tempid TempId]
                    [om.transit TempIdHandler])))
 
 #?(:cljs (enable-console-print!))
 
+#?(:clj
+   (defn get-packer []
+     (sente-transit/->TransitPacker :json
+       {:handlers (merge (get-write-handler)
+                         {TempId (TempIdHandler.)})}
+       {:handlers (merge (get-read-handler)
+                         {"om/id" (reify ReadHandler
+                                    (fromRep [_ id] (TempId. id)))})})))
+#?(:cljs
+   (defn get-packer []
+     (sente-transit/->TransitPacker :json
+       {:handlers (merge (get-write-handler)
+                         {TempId (TempIdHandler.)})}
+       {:handlers (merge (get-read-handler)
+                         {"om/id" (fn [id] (tempid id))
+                          "n" (fn [n] (js/Number n))
+                          "ratio" (fn [[n d]] (/ (js/Number n)
+                                                 (js/Number d)))})})))
+
 (derive :unicycle.handlers/sente ::query-response)
 (derive :unicycle.app/login ::query)
 (derive :unicycle.app/main ::query)
 
-#?(:clj
-   (defn get-packer []
-     (sente-transit/->TransitPacker :json
-       {:handlers {TempId (TempIdHandler.)}}
-       {:handlers {"om/id" (reify
-                             ReadHandler
-                             (fromRep [_ id] (TempId. id)))}})))
-#?(:cljs
-   (defn get-packer []
-     (sente-transit/->TransitPacker :json
-       {:handlers {TempId (TempIdHandler.)}}
-       {:handlers {"om/id" (fn [id] (tempid id))
-                   "n" (fn [n] (js/Number n))
-                   "ratio" (fn [[n d]] (/ (js/Number n)
-                                          (js/Number d)))}})))
-
 (defmulti event :id)
 
 (defmethod event :chsk/recv [{:keys [?data]}]
-;  (println "Received:" ?data)
+  (println "Received:" ?data)
   (if (isa? (first ?data) ::query-response)
     (last ?data)))
 
 (defmethod event ::query [{:keys [?data]}]
-;  (println "Query:" ?data)
+  (println "Query:" ?data)
   ?data)
 
 (defmethod event :chsk/ws-ping [{uid :uid {url :remote-addr} :ring-req}]
@@ -60,4 +64,4 @@
   `[(tag/delete)])
 
 (defmethod event :default [{e :event}]
-  (println "Unhandled event: %s" e))
+  (println "Unhandled event:" e))

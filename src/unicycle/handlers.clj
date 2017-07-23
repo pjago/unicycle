@@ -8,9 +8,10 @@
 
 (def parser (om/parser {:read p/read :mutate p/mutate}))
 
-(defmacro with-env [env with query]
-  (let [ks (map keyword with)]
-    `(dosync (parser (assoc ~env ~@(interleave ks with)) ~query))))
+(defmacro parse-with [env as-keys query]
+  (let [keys (map keyword as-keys)]
+    `(let [env# (assoc ~env ~@(interleave keys as-keys))]
+       (dosync (parser env# ~query)))))
 
 (defn ring-handler [{:keys [state log roots links] :as this}]
   (routes
@@ -28,15 +29,15 @@
       (-> (response @state)
           (content-type "application/json")))
     (GET "/tags/:uid" [uid]
-      (-> (response (select-keys @state (get @links uid)))
+      (-> (response (response @state)) ;todo: something useful
           (content-type "application/json")))
     (POST "/tags/:uid" [uid :as {?query :body-params url :remote-addr}]
       (when (-> @links (get url) (get uid))
-        (-> (with-env this [url uid] ?query)
+        (-> (parse-with this [url uid] ?query)
             (content-type "application/json"))))
     (route/resources "/" {:root ""})))
 
 (defn sente-handler [{send! :chsk-send! :as this}]
   (fn [{:as msg uid :uid {url :remote-addr} :ring-req}]
     (if-let [?query (event msg)]
-      (send! uid [::sente (with-env this [url uid] ?query)]))))
+      (send! uid [::sente (parse-with this [url uid] ?query)]))))

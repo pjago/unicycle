@@ -1,78 +1,92 @@
 (ns unicycle.parser
   (:refer-clojure :exclude [read])
-  (:require [om.next.server :as om]))
+  (:require [om.next.server :as om]
+            [om.util :as is]
+            [om.tempid :refer [tempid?]]))
 
-(defn watch [{:keys [uid log]} key params]
-  (when-not (and (nil? params) (= key :tags))
+(defn watch [{:keys [log ast uid]} key params]
+  (when-not (:target ast)
     (alter log conj [uid key])
     (if (-> @log count (>= 500))
       (alter log (comp vec rest))))
   key)
 
-(defmulti read om/dispatch)
+(defn new-tag [links url tag]
+  (as-> tag tag*
+    (if (tempid? tag)
+      (subs (str tag) 7 (dec (count (str tag))))
+      (name tag))
+    (if (contains? links tag*)
+      (str (gensym tag*))
+      tag*)))
 
-(defmethod read :tags [{tags :state {?q :query} :ast} _ {:keys [only]}]
-  {:value (cond->> (if (some? only)
-                     (select-keys @tags only)
-                     @tags)
-                   (some? ?q) ;the query is asymetric, since the server has no distinction of type
-                   (into {} (map (fn [[k v]] ;on the client it is a union. here it is a join
-                                   [k (select-keys v ?q)]))))})
+(defn tempids [roots uid tempid new]
+  {:tempids (into {} (map (fn [k] [[k tempid] [k new]]))
+                     (keys (get roots uid)))})
+
+(def grammar (make-hierarchy))
+
+(defmulti read om/dispatch :hierarchy #'grammar)
+
+(defmethod read ::components [{:keys [state ast]} key _]
+  (as-> (:key ast) ?key
+        (if (is/ident? ?key)
+          (if (= (peek ?key) '_)
+            (pop ?key)
+            ?key)
+          [key])
+        (if-let [found (get-in @state ?key)]
+          {:value found}
+          {:value ::not-found})))
+
+(defmethod read ::tags [{:keys [state]} key {:keys [value] :or {value true}}]
+  (let [data @state shape (get data key)]
+    (if value ;(om/db->tree query (get data key) data)
+      {:value (mapv #(get-in data %) shape)}
+      {:value shape})))
 
 (defmethod read :default [{tags :state} key _]
   (if-let [found (get @tags key)]
     {:value found}
     {:value ::not-found}))
 
-(defmethod read :uid [{id :uid} _ _]
-  {:value id})
+(defmethod read :uid [{uid :uid} _ _] ;todo: remove
+  {:value uid})
 
-(defmulti mutate om/dispatch)
+(defmulti mutate om/dispatch :hierarchy #'grammar)
 
-(defmethod mutate 'tag/act [{:keys [state uid]} _ {u :value}]
-  {:action #(do (alter state assoc-in [uid :act] u)
-                nil)})
-
-(defmethod mutate 'tag/merge [{:keys [state links url uid]} _ {tag :tag :as data}]
-  (if (or (nil? tag) (= uid tag))
-    {:action #(do (alter state update uid merge data)
-                  nil)}
-    {:action #(when (-> @links (get url) (get tag))
-                (alter links update uid (fnil conj #{}) tag)
-                (alter state update tag merge data)
+(defmethod mutate 'tag/assoc [{:keys [state links url uid]} _ {$ :tag as :value}]
+  (let [tag (or $ (keyword "tag" uid))]
+    {:action #(when-not (new-tag @links url tag)
+                (alter state assoc-in [(.key as) tag] as)
                 nil)}))
 
-(defmethod mutate 'tag/new [{:keys [state links url uid]} _ {tag :tag :as data}]
-  (if (or (nil? tag) (= uid tag))
-    {:action #(do (alter links update url (fnil conj #{}) uid)
-                  (alter links update uid (fnil conj #{}) uid)
-                  (alter state assoc uid (assoc data :tag uid))
-                  nil)}
-    {:action #(do (alter links update url (fnil conj #{}) tag)
-                  (alter links update tag (fnil conj #{}) tag)
-                  (alter links update uid (fnil conj #{}) tag)
-                  (alter state assoc tag (assoc data :tag tag))
-                  nil)}))
+(defmethod mutate 'tag/dissoc [{:keys [state]} _ {tag :tag as :value}]
+  {:action #(do (alter state update as dissoc tag)
+                nil)})
 
-(defmethod mutate 'tag/delete [{:keys [state links url uid]} _ _]
+(defmethod mutate 'tag/new [{:keys [links roots url uid]} _ {tag :tag}]
+  (if-let [new (new-tag @links url (or tag uid))]
+    {:action #(do (alter links update url (fnil conj #{}) new)
+                  (alter links update uid (fnil conj #{}) new)
+                  (alter links update new (fnil conj #{}) new)
+                  nil)
+     :value (if (tempid? tag)
+              (tempids @roots uid tag (keyword "tag" new)))}))
+
+(defmethod mutate 'tag/delete [{:keys [links url uid]} _ _]
   {:action #(do (doseq [tag (get @links uid)]
                   (alter links update tag disj uid))
                 (alter links update url disj uid)
                 (alter links dissoc uid)
-                (alter state dissoc uid)
                 nil)})
 
-(defmethod mutate 'tag/clear [{:keys [state links uid]} _ _]
-  {:action #(do (alter state assoc uid {:tag uid})
-                nil)})
-
-(defmethod mutate 'tag/root [{:keys [state uid roots]} _ params]
+(defmethod mutate 'tag/root [{:keys [state roots uid]} _ params]
   {:action #(do (alter roots assoc uid params)
                 nil)})
 
-(defmethod mutate 'stream/toggle [_ _ _])
+(defmethod mutate :default [_ _ _])
 
-(defmethod mutate 'uid/set [{:keys [uid roots]} _ {tempid :tempid}]
-  (if (some? tempid)
-    {:value {:tempids (into {} (map (fn [k] [[k tempid] [k uid]]))
-                               (keys (get @roots uid)))}}))
+(defmethod mutate 'unicycle.app/uid-set [{:keys [uid roots]} _ {tmp :tempid}] ;todo: remove
+  (if (tempid? tmp)
+    {:value (tempids @roots uid tmp (keyword "tag" uid))}))

@@ -2,6 +2,7 @@
   (:require [unicycle.handlers :refer [ring-handler sente-handler]]
             [unicycle.components :refer [map->Game]]
             [unicycle.socket :refer [get-packer]]
+            [unicycle.parser :as p]
             [environ.core :refer [env]]
             [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
@@ -10,7 +11,6 @@
             [com.stuartsierra.component :as component]
             (system.components
               [http-kit :refer [new-web-server]]
-              ;[immutant-web :refer [new-web-server]]
               [sente :refer [new-channel-sockets sente-routes]]
               [handler :refer [new-handler]]
               [endpoint :refer [new-endpoint]]
@@ -26,24 +26,15 @@
 
 (def ip (or (env :ip-server) "127.0.0.1"))
 
-(def pool (atom {}))
-(defn new-uid [{cid :client-id url :remote-addr}]
-  (swap! pool update cid
-         #(if-not ((set %) url)
-            ((fnil conj []) % url)
-            %))
-  (-> #(when (= %2 url) %1)
-      (keep-indexed (get @pool cid))
-      (first)
-      (as-> n (if-not (zero? n)
-                (str cid "_" n)
-                cid))))
+(def ref-state
+  {:state (ref {})
+   :log   (ref [])
+   :roots (ref {})
+   :links (ref {})})
 
-(def init-data
-  {:state {}
-   :log   []
-   :roots {}
-   :links {}})
+(defn new-uid [{cid :client-id url :remote-addr}]
+  (or (p/new-tag @(:links ref-state) url cid)
+      (str (gensym cid))))
 
 (def site
   (-> site-defaults
@@ -58,10 +49,10 @@
 ;systems
 (defn uni-system []
   (let [sys (component/system-map
-              :state (ref (:state init-data))
-              :log   (ref (:log init-data))
-              :roots (ref (:roots init-data))
-              :links (ref (:links init-data))
+              :state (:state ref-state)
+              :log   (:log ref-state)
+              :roots (:roots ref-state)
+              :links (:links ref-state)
               :game (component/using
                       (map->Game {:fps 30})
                       [:state])
@@ -71,22 +62,20 @@
                                              :packer          (get-packer)
                                              :wrap-component? true})
                        [:state :log :roots :links])
-              :app-middleware (new-middleware {:middleware [wrap-restful-format]})
-              :middleware (new-middleware {:middleware [[wrap-defaults site]
-                                                        [wrap-canonical-redirect redirect]]})
               :sente-endpoint (component/using
                                 (new-endpoint sente-routes)
                                 [:sente])
-              :app-endpoints (component/using
-                               (new-endpoint ring-handler)
-                               [:state :log :roots :links :app-middleware])
+              :ring-middleware (new-middleware {:middleware [wrap-restful-format]})
+              :ring-endpoints (component/using
+                                (new-endpoint ring-handler)
+                                [:state :log :roots :links :ring-middleware])
+              :middleware (new-middleware {:middleware [[wrap-defaults site]
+                                                        [wrap-canonical-redirect redirect]]})
               :handler (component/using
                          (new-handler)
-                         [:sente-endpoint :app-endpoints :middleware])
+                         [:sente-endpoint :ring-endpoints :middleware])
               :http (component/using
                       (new-web-server port nil {:ip ip})
                       [:handler]))]
     (def system sys)
     sys))
-
-
